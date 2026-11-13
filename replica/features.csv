@@ -1,0 +1,25 @@
+feature,area,priority,original,clone,notes
+Sign up / log in with email,onboarding,must,yes,no,
+Connect a bank account through a licensed aggregator (Fintoc/Belvo-style),bank-connection,must,yes,no,consent + bank login happen in the aggregator's own widget; we never see the real bank password
+View linked accounts and their balances,bank-connection,must,yes,no,
+Auto-sync new transactions from the connected bank,transactions,must,yes,no,via aggregator webhook/poll
+Auto-categorize each transaction,transactions,must,yes,no,starts from a rules/ML pass; user corrections should feed back in
+Clean up raw bank transaction text into a readable merchant name,transactions,must,yes,no,site calls this "movimientos que se entienden"
+Monthly income/expense summary on the home dashboard,dashboard,must,yes,no,
+Set a per-category monthly budget with a progress indicator,budgets,must,yes,no,
+Chat with the AI assistant about your own spending (read-only Q&A),assistant,must,yes,no,must answer only from the user's real stored data, never invented numbers
+Log a manual expense via chat (typed text),assistant,should,yes,no,
+Log an expense from a photo of a receipt (OCR),assistant,should,yes,no,
+Log an expense by voice note,assistant,should,yes,no,
+Manually edit/correct a transaction's category,transactions,should,yes,no,feeds the categorizer's learning loop
+Budget alert when a category nears or passes its cap,budgets,should,yes,no,push notification
+Upcoming/recurring payments view,dashboard,should,yes,no,
+Disconnect a bank or delete account data from Settings,settings,should,yes,no,
+Shared/household accounts (more than one user on one budget),accounts,could,yes,no,
+"Me deben" bill-splitting between contacts,social,could,yes,no,
+Card installment ("cuotas") tracking,transactions,could,yes,no,
+Discounts/offers map tied to linked cards,discounts,could,yes,no,needs the app's own merchant partnerships first
+Their own bank-scraping / password-based connection tech ("Kripta"),bank-connection,could,yes,skip,regulated activity; Finsy uses a licensed aggregator API instead and never handles the real bank password
+Partner merchant discount deals (Rappi, Entel, WHOOSH, Deep),discounts,could,yes,skip,business partnerships, not a rebuildable feature
+Their brand assets (name "SaveMoney", assistant "Lisa", aggregator "Kripta", plan "SaverPlus"),branding,could,yes,skip,Finsy uses its own naming throughout
+Their existing user base, reviews and the "+150.000 personas" stat,marketing,could,yes,skip,not a feature and not transferable to a new product

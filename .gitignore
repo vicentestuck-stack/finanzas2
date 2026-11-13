@@ -1,0 +1,18 @@
+# Secrets — never commit these
+backend/.env
+backend/.env.local
+backend/.env*.local
+
+# Vercel CLI local project link/cache
+backend/.vercel
+
+# Dependencies
+backend/node_modules/
+node_modules/
+
+# Packaged build artifact (source files are tracked instead)
+*.zip
+
+# OS cruft
+.DS_Store
+Thumbs.db
