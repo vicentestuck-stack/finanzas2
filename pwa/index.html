@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Finsy — Tus finanzas, claras</title>
 <meta name="description" content="Anota tus gastos, arma presupuestos y pregúntale al asistente cómo vas este mes.">
 <meta name="theme-color" content="#F4F7F2">
@@ -22,8 +22,9 @@
     --accent:#15503F; --accent-ink:#FFFFFF; --green:#2FA86E; --orange:#F0A33D; --cyan:#5B9CF5; --red:#E2574C;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg)}
+  html,body{margin:0;height:100%;background:var(--bg);touch-action:pan-x pan-y;overscroll-behavior:none}
   body{font-family:'Inter',system-ui,sans-serif;color:var(--text);-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+  input,textarea,select{font-size:16px}
   h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.01em;margin:0}
   button{font-family:inherit;cursor:pointer}
   input,textarea,select{font-family:inherit}
@@ -86,7 +87,7 @@
   .modal h3{font-size:17px}
   .field{display:flex;flex-direction:column;gap:6px}
   .field label{font-size:12.5px;color:var(--text-dim);font-weight:600}
-  .field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-size:15px;outline:none}
+  .field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-size:16px;outline:none}
   .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
   .toggle-row{display:flex;gap:8px}
   .toggle-row button{flex:1;padding:11px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-weight:600;font-size:13.5px}
@@ -97,7 +98,7 @@
   .bubble.user{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-radius:16px 16px 4px 16px;font-weight:500}
   .chat-input-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:8px;background:var(--bg);padding:10px 0 2px 0}
   .pill-input{flex:1;display:flex;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:0 14px;height:44px}
-  .pill-input input{flex:1;border:none;background:transparent;color:var(--text);font-size:14px;outline:none}
+  .pill-input input{flex:1;border:none;background:transparent;color:var(--text);font-size:16px;outline:none}
   .round-btn{width:40px;height:40px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0}
   .round-btn.accent{background:var(--accent);color:var(--accent-ink)}
   .quick-chip{background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:9px 13px;font-size:12px;color:var(--text-dim)}
