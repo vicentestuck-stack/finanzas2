@@ -886,6 +886,7 @@
   var acctPickedColor = PALETTE[0];
   var kpAmountStr = '0';
   var kpRecurring = null; // null | 'monthly' | 'weekly'
+  var pendingQuickCategory = (new URLSearchParams(location.search)).get('rapido') || null;
   var debtEditingId = null;
   var debtPickedColor = PALETTE[0];
   var debtPayingId = null;
@@ -1460,6 +1461,23 @@
     document.getElementById('keypadScreen').classList.add('open');
   }
   function closeKeypad(){ document.getElementById('keypadScreen').classList.remove('open'); }
+  // Lets an iOS Shortcut (e.g. bound to Back Tap) open Finsy straight on the
+  // add-expense screen with a category preselected, via ?rapido=<id-o-nombre>.
+  function maybeOpenQuickAdd(){
+    if(!pendingQuickCategory) return;
+    var key = pendingQuickCategory;
+    pendingQuickCategory = null;
+    var cat = state.categories.find(function(c){ return c.id===key; })
+      || state.categories.find(function(c){ return normalizeDesc(c.name)===normalizeDesc(key); });
+    openKeypad(null);
+    if(cat){
+      addType = cat.kind==='income' ? 'income' : 'expense';
+      document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){ b.classList.toggle('sel', b.dataset.type===addType); });
+      kpFillCategories();
+      var btn = document.querySelector('#kpCatRow [data-kpcat="'+cat.id+'"]');
+      if(btn){ document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){x.classList.remove('active');}); btn.classList.add('active'); }
+    }
+  }
   function saveKeypad(){
     var amount = parseInt(kpAmountStr.replace(',','.'), 10);
     if(!amount || amount<=0){ toast('Ingresa un monto válido'); return; }
@@ -2547,6 +2565,7 @@
   function hideGate(){
     document.getElementById('authGate').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    maybeOpenQuickAdd();
   }
   function cloudSignUp(emailElId, passElId, msgElId){
     var c = getCloudClient(); if(!c){ cloudAuthMsg(msgElId, 'Sin conexión', true); return; }
