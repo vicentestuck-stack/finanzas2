@@ -139,7 +139,29 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 </head>
 <body>
-<div id="app">
+
+<div id="authGate" style="display:none;position:fixed;inset:0;z-index:100;background:var(--bg);overflow-y:auto">
+  <div style="max-width:380px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:40px 24px;gap:22px">
+    <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+      <div class="mark" style="width:34px;height:34px;border-radius:10px;font-size:17px">F</div>
+      <span style="font-weight:700;font-size:19px;font-family:'Space Grotesk',sans-serif">Finsy</span>
+    </div>
+    <div style="text-align:center">
+      <h1 style="font-size:19px;font-weight:700;margin:0 0 6px 0">Inicia sesión para continuar</h1>
+      <p class="small muted" style="margin:0">Tus datos están protegidos con tu cuenta. Necesitas internet solo la primera vez que inicias sesión en un dispositivo.</p>
+    </div>
+    <div class="field"><label for="gateEmail">Correo</label><input id="gateEmail" type="email" autocomplete="email" spellcheck="false" placeholder="tucorreo@ejemplo.com"></div>
+    <div class="field"><label for="gatePassword">Contraseña</label><input id="gatePassword" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+    <div class="row" style="gap:10px">
+      <button class="btn btn-ghost" id="btnGateSignup" type="button" style="flex:1">Crear cuenta</button>
+      <button class="btn btn-primary" id="btnGateLogin" type="button" style="flex:1">Iniciar sesión</button>
+    </div>
+    <p class="small" id="gateAuthMsg" style="margin:0;text-align:center;min-height:16px"></p>
+    <p class="xsmall faint" id="gateOfflineNote" style="margin:0;text-align:center;display:none">Sin conexión: si ya iniciaste sesión antes en este dispositivo, no necesitas volver a hacerlo.</p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
 
   <div class="topbar">
     <div class="brand">
@@ -243,16 +265,9 @@
           <p class="small muted" style="margin:0">Falta configurar el backend (Supabase + Fintoc) en este archivo. Mientras tanto, anota tus gastos a mano o pídeselo al asistente.</p>
         </div>
 
-        <!-- logged out -->
+        <!-- logged out (shouldn't normally be seen — the gate requires login before Settings is reachable) -->
         <div id="cloudLoggedOut" style="display:none;flex-direction:column;gap:10px">
-          <p class="small muted" style="margin:0">Crea una cuenta o inicia sesión para conectar tu banco y sincronizar tus movimientos entre dispositivos.</p>
-          <div class="field"><label for="cloudEmail">Correo</label><input id="cloudEmail" type="email" autocomplete="email" spellcheck="false" placeholder="tucorreo@ejemplo.com"></div>
-          <div class="field"><label for="cloudPassword">Contraseña</label><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="••••••••"></div>
-          <div class="row" style="gap:10px">
-            <button class="btn btn-ghost" id="btnCloudSignup" type="button" style="flex:1">Crear cuenta</button>
-            <button class="btn btn-primary" id="btnCloudLogin" type="button" style="flex:1">Iniciar sesión</button>
-          </div>
-          <p class="small" id="cloudAuthMsg" style="margin:0;color:var(--orange)"></p>
+          <p class="small muted" style="margin:0">No hay una sesión activa. Vuelve a abrir la app para iniciar sesión.</p>
         </div>
 
         <!-- logged in, no bank yet -->
@@ -1027,41 +1042,44 @@
     return cloudClient;
   }
   function fintocWidgetAvailable(){ return typeof Fintoc !== 'undefined'; }
-  function cloudAuthMsg(msg, isError){
-    var el = document.getElementById('cloudAuthMsg');
+  function cloudAuthMsg(msgElId, msg, isError){
+    var el = document.getElementById(msgElId);
     if(el){ el.textContent = msg||''; el.style.color = isError ? 'var(--red)' : 'var(--green)'; }
   }
 
-  function cloudSignUp(){
-    var c = getCloudClient(); if(!c){ toast('Sin conexión'); return; }
-    var email = document.getElementById('cloudEmail').value.trim();
-    var password = document.getElementById('cloudPassword').value;
-    if(!email || !password){ cloudAuthMsg('Completa correo y contraseña', true); return; }
-    c.auth.signUp({ email:email, password:password }).then(function(res){
-      if(res.error){ cloudAuthMsg(res.error.message, true); return; }
-      cloudSession = res.data.session;
-      cloudAuthMsg(cloudSession ? 'Cuenta creada.' : 'Cuenta creada. Revisa tu correo para confirmarla.', false);
-      renderCloudSettings();
-      if(cloudSession) cloudSync();
-    }).catch(function(){ cloudAuthMsg('No se pudo crear la cuenta (revisa tu conexión)', true); });
+  function showGate(){
+    document.getElementById('authGate').style.display = 'block';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('gateOfflineNote').style.display = navigator.onLine ? 'none' : 'block';
   }
-  function cloudSignIn(){
-    var c = getCloudClient(); if(!c){ toast('Sin conexión'); return; }
-    var email = document.getElementById('cloudEmail').value.trim();
-    var password = document.getElementById('cloudPassword').value;
-    if(!email || !password){ cloudAuthMsg('Completa correo y contraseña', true); return; }
+  function hideGate(){
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+  }
+
+  function cloudSignUp(emailElId, passElId, msgElId){
+    var c = getCloudClient(); if(!c){ cloudAuthMsg(msgElId, 'Sin conexión', true); return; }
+    var email = document.getElementById(emailElId).value.trim();
+    var password = document.getElementById(passElId).value;
+    if(!email || !password){ cloudAuthMsg(msgElId, 'Completa correo y contraseña', true); return; }
+    c.auth.signUp({ email:email, password:password }).then(function(res){
+      if(res.error){ cloudAuthMsg(msgElId, res.error.message, true); return; }
+      cloudAuthMsg(msgElId, res.data.session ? 'Cuenta creada.' : 'Cuenta creada. Revisa tu correo para confirmarla.', false);
+    }).catch(function(){ cloudAuthMsg(msgElId, 'No se pudo crear la cuenta (revisa tu conexión)', true); });
+  }
+  function cloudSignIn(emailElId, passElId, msgElId){
+    var c = getCloudClient(); if(!c){ cloudAuthMsg(msgElId, 'Sin conexión', true); return; }
+    var email = document.getElementById(emailElId).value.trim();
+    var password = document.getElementById(passElId).value;
+    if(!email || !password){ cloudAuthMsg(msgElId, 'Completa correo y contraseña', true); return; }
     c.auth.signInWithPassword({ email:email, password:password }).then(function(res){
-      if(res.error){ cloudAuthMsg(res.error.message, true); return; }
-      cloudSession = res.data.session;
-      cloudAuthMsg('', false);
-      cloudRefreshBankStatus().then(function(){ renderCloudSettings(); cloudSync(); });
-    }).catch(function(){ cloudAuthMsg('No se pudo iniciar sesión (revisa tu conexión)', true); });
+      if(res.error){ cloudAuthMsg(msgElId, res.error.message, true); return; }
+      cloudAuthMsg(msgElId, '', false);
+    }).catch(function(){ cloudAuthMsg(msgElId, 'No se pudo iniciar sesión (revisa tu conexión)', true); });
   }
   function cloudSignOut(){
     var c = getCloudClient();
     (c ? c.auth.signOut() : Promise.resolve()).finally(function(){
-      cloudSession = null; cloudBankConnected = false; cloudStatusInfo = null;
-      renderCloudSettings();
       toast('Sesión cerrada');
     });
   }
@@ -1148,21 +1166,33 @@
     var when = (cloudStatusInfo && cloudStatusInfo.last_synced_at) ? new Date(cloudStatusInfo.last_synced_at).toLocaleString('es-CL') : 'nunca';
     document.getElementById('cloudStatusText').textContent = inst + ' — última sincronización: ' + when + (navigator.onLine ? '' : ' (sin conexión ahora)');
   }
+  function onCloudSessionChange(session){
+    cloudSession = session;
+    if(session){
+      hideGate();
+      cloudRefreshBankStatus().then(function(){ renderCloudSettings(); if(navigator.onLine) cloudSync(); });
+    } else {
+      cloudBankConnected = false; cloudStatusInfo = null;
+      renderCloudSettings();
+      showGate();
+    }
+  }
   function initCloud(){
     var c = getCloudClient();
-    if(!c){ renderCloudSettings(); return; }
+    if(!c){ hideGate(); renderCloudSettings(); return; } // not configured: no login required, app works locally
+    c.auth.onAuthStateChange(function(_event, session){ onCloudSessionChange(session); });
     c.auth.getSession().then(function(res){
-      cloudSession = res.data.session;
-      if(cloudSession){
-        cloudRefreshBankStatus().then(function(){ renderCloudSettings(); if(navigator.onLine) cloudSync(); });
-      } else renderCloudSettings();
-    }).catch(function(){ renderCloudSettings(); });
+      onCloudSessionChange(res.data.session);
+    }).catch(function(){
+      // offline on first load with no cached session yet: show the gate with its offline note
+      if(!cloudSession) showGate();
+    });
   }
-  window.addEventListener('online', function(){ if(cloudSession) cloudSync(); renderCloudSettings(); });
-  window.addEventListener('offline', function(){ renderCloudSettings(); });
+  window.addEventListener('online', function(){ if(cloudSession) cloudSync(); renderCloudSettings(); if(!cloudSession) showGate(); });
+  window.addEventListener('offline', function(){ renderCloudSettings(); if(!cloudSession) showGate(); });
 
-  document.getElementById('btnCloudSignup').addEventListener('click', cloudSignUp);
-  document.getElementById('btnCloudLogin').addEventListener('click', cloudSignIn);
+  document.getElementById('btnGateSignup').addEventListener('click', function(){ cloudSignUp('gateEmail','gatePassword','gateAuthMsg'); });
+  document.getElementById('btnGateLogin').addEventListener('click', function(){ cloudSignIn('gateEmail','gatePassword','gateAuthMsg'); });
   document.getElementById('btnCloudLogoutA').addEventListener('click', cloudSignOut);
   document.getElementById('btnCloudLogoutB').addEventListener('click', cloudSignOut);
   document.getElementById('btnConnectBank').addEventListener('click', cloudConnectBank);
@@ -1196,7 +1226,14 @@
 
   renderAll();
   setView('home');
-  initCloud();
+  // initCloud() needs the deferred Supabase script to have run first; deferred
+  // scripts are guaranteed to finish before DOMContentLoaded, so wait for it
+  // instead of calling this synchronously during the initial parse.
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initCloud);
+  } else {
+    initCloud();
+  }
 })();
 </script>
 </body>
