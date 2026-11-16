@@ -242,6 +242,7 @@
 
     <!-- RESUMEN -->
     <section class="view" data-view="summary">
+      <div class="card" id="healthCard"></div>
       <div class="ring-wrap">
         <span class="cap">Este mes</span>
         <div class="ring-center" id="summaryRing"></div>
@@ -261,10 +262,16 @@
       </div>
       <div class="list" id="budgetList"></div>
       <button class="btn btn-ghost" id="btnAddBudgetCat" type="button" style="border-style:dashed">+ Añadir categoría</button>
+      <div>
+        <div class="section-title"><h2>Metas de ahorro</h2></div>
+        <div class="list" id="goalList" style="margin-top:10px"></div>
+      </div>
+      <button class="btn btn-ghost" id="btnAddGoal" type="button" style="border-style:dashed">+ Nueva meta</button>
     </section>
 
     <!-- ANÁLISIS -->
     <section class="view" data-view="analysis">
+      <div class="card" id="forecastCard" style="display:flex;flex-direction:column;gap:4px"></div>
       <div class="card">
         <div class="row" style="gap:20px;margin-bottom:10px">
           <div><span class="xsmall faint" style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>Ingresos</span><span class="amount-pos" id="anaIncome" style="font-size:16px;display:block;margin-top:2px">$0</span></div>
@@ -305,6 +312,39 @@
       <button class="btn btn-ghost" id="btnAddCategory" type="button" style="border-style:dashed">+ Nueva categoría</button>
     </section>
 
+    <!-- PATRIMONIO -->
+    <section class="view" data-view="networth">
+      <div style="text-align:center;padding:10px 0">
+        <span class="small muted">Patrimonio neto</span>
+        <div class="amount" id="nwTotal" style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:30px;margin-top:2px">$0</div>
+        <span class="xsmall faint" id="nwBreakdown"></span>
+      </div>
+
+      <div class="section-title"><h2>Inversiones</h2></div>
+      <div class="list" id="investList"></div>
+      <button class="btn btn-ghost" id="btnAddInvestment" type="button" style="border-style:dashed">+ Nueva inversión</button>
+
+      <div class="section-title" style="margin-top:4px"><h2>Deudas</h2></div>
+      <div class="list" id="debtList"></div>
+      <button class="btn btn-ghost" id="btnAddDebt" type="button" style="border-style:dashed">+ Nueva deuda</button>
+    </section>
+
+    <!-- SUSCRIPCIONES -->
+    <section class="view" data-view="subscriptions">
+      <p class="small muted" style="margin:0">Detectadas automáticamente a partir de tus movimientos: mismo nombre, monto parecido, en al menos 2 meses distintos.</p>
+      <div class="section-title"><h2>Candidatas</h2></div>
+      <div class="list" id="subCandidateList" style="margin-top:10px"></div>
+      <div class="section-title" style="margin-top:4px"><h2>Confirmadas</h2></div>
+      <div class="list" id="subConfirmedList" style="margin-top:10px"></div>
+    </section>
+
+    <!-- COMPARTIDO -->
+    <section class="view" data-view="shared">
+      <p class="small muted" style="margin:0">Lleva la cuenta de quién le debe a quién. Esto se guarda solo en tu teléfono — no sincroniza con la cuenta de la otra persona.</p>
+      <div class="list" id="sharedList"></div>
+      <button class="btn btn-ghost" id="btnAddSharedPerson" type="button" style="border-style:dashed">+ Nueva persona</button>
+    </section>
+
     <!-- CHAT -->
     <section class="view" data-view="chat" style="padding-bottom:0">
       <p class="small muted" style="margin:0">Asistente local: entiende frases simples como <em>"gasté 6000 en café"</em> o <em>"¿cómo voy este mes?"</em>. Toca el micrófono para dictar.</p>
@@ -334,6 +374,15 @@
       <div class="card" style="padding:4px 14px">
         <button type="button" class="settings-row" id="rowCategories" style="width:100%;background:none;border:none;color:inherit;text-align:left;border-bottom:1px solid var(--border)">
           <span class="lbl">Categorías</span><span class="val">›</span>
+        </button>
+        <button type="button" class="settings-row" id="rowNetWorth" style="width:100%;background:none;border:none;color:inherit;text-align:left;border-bottom:1px solid var(--border)">
+          <span class="lbl">Patrimonio (inversiones y deudas)</span><span class="val">›</span>
+        </button>
+        <button type="button" class="settings-row" id="rowSubscriptions" style="width:100%;background:none;border:none;color:inherit;text-align:left;border-bottom:1px solid var(--border)">
+          <span class="lbl">Suscripciones</span><span class="val">›</span>
+        </button>
+        <button type="button" class="settings-row" id="rowShared" style="width:100%;background:none;border:none;color:inherit;text-align:left;border-bottom:1px solid var(--border)">
+          <span class="lbl">Compartido (quién debe a quién)</span><span class="val">›</span>
         </button>
         <div class="settings-row">
           <span class="lbl">Mostrar céntimos</span>
@@ -409,7 +458,7 @@
 
       <div class="card" style="display:flex;flex-direction:column;gap:6px">
         <span style="font-weight:600;font-size:14.5px">Acerca de Finsy</span>
-        <p class="small faint" style="margin:0">Versión local 0.2 · Varias cuentas, transferencias, recurrentes, presupuestos y análisis — todo en tu teléfono, con sincronización bancaria opcional.</p>
+        <p class="small faint" style="margin:0">Versión local 0.3 · Cuentas, presupuestos, metas de ahorro, patrimonio neto, deudas, suscripciones y gastos compartidos — todo en tu teléfono, con sincronización bancaria opcional.</p>
       </div>
     </section>
 
@@ -569,6 +618,147 @@
   </div>
 </div>
 
+<!-- Investment modal -->
+<div class="modal-overlay" id="modalInvestment">
+  <div class="modal">
+    <h3 id="investmentModalTitle">Nueva inversión</h3>
+    <div class="field">
+      <label for="fInvestName">Nombre</label>
+      <input id="fInvestName" type="text" placeholder="APV, fondo mutuo, acciones...">
+    </div>
+    <div class="field">
+      <label for="fInvestValue">Valor actual (CLP)</label>
+      <input id="fInvestValue" type="number" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="field">
+      <label>Color</label>
+      <div class="color-grid" id="investColorGrid"></div>
+    </div>
+    <div class="row" style="gap:10px;margin-top:4px">
+      <button class="btn btn-ghost" id="btnInvestmentCancel" type="button" style="flex:1">Cancelar</button>
+      <button class="btn btn-primary" id="btnInvestmentSave" type="button" style="flex:1">Guardar</button>
+    </div>
+    <button class="btn btn-danger" id="btnInvestmentDelete" type="button" style="display:none">Eliminar inversión</button>
+  </div>
+</div>
+
+<!-- Debt modal -->
+<div class="modal-overlay" id="modalDebt">
+  <div class="modal">
+    <h3 id="debtModalTitle">Nueva deuda</h3>
+    <div class="field">
+      <label for="fDebtName">Nombre</label>
+      <input id="fDebtName" type="text" placeholder="Tarjeta de crédito, crédito de consumo...">
+    </div>
+    <div class="field">
+      <label for="fDebtBalance">Saldo que debes (CLP)</label>
+      <input id="fDebtBalance" type="number" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="field">
+      <label for="fDebtApr">Tasa de interés anual (%, opcional)</label>
+      <input id="fDebtApr" type="number" inputmode="decimal" placeholder="0">
+    </div>
+    <div class="field">
+      <label>Color</label>
+      <div class="color-grid" id="debtColorGrid"></div>
+    </div>
+    <div class="row" style="gap:10px;margin-top:4px">
+      <button class="btn btn-ghost" id="btnDebtCancel" type="button" style="flex:1">Cancelar</button>
+      <button class="btn btn-primary" id="btnDebtSave" type="button" style="flex:1">Guardar</button>
+    </div>
+    <button class="btn btn-danger" id="btnDebtDelete" type="button" style="display:none">Eliminar deuda</button>
+  </div>
+</div>
+
+<!-- Pay debt modal -->
+<div class="modal-overlay" id="modalDebtPay">
+  <div class="modal">
+    <h3 id="debtPayModalTitle">Pagar deuda</h3>
+    <div class="field">
+      <label for="fDebtPayAccount">Desde la cuenta</label>
+      <select id="fDebtPayAccount"></select>
+    </div>
+    <div class="field">
+      <label for="fDebtPayAmount">Monto a pagar (CLP)</label>
+      <input id="fDebtPayAmount" type="number" inputmode="numeric" min="1" placeholder="20000">
+    </div>
+    <div class="row" style="gap:10px;margin-top:4px">
+      <button class="btn btn-ghost" id="btnDebtPayCancel" type="button" style="flex:1">Cancelar</button>
+      <button class="btn btn-primary" id="btnDebtPaySave" type="button" style="flex:1">Pagar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Goal modal -->
+<div class="modal-overlay" id="modalGoal">
+  <div class="modal">
+    <h3 id="goalModalTitle">Nueva meta</h3>
+    <div class="field">
+      <label for="fGoalName">Nombre</label>
+      <input id="fGoalName" type="text" placeholder="Vacaciones, pie de depto...">
+    </div>
+    <div class="field">
+      <label for="fGoalTarget">Monto objetivo (CLP)</label>
+      <input id="fGoalTarget" type="number" inputmode="numeric" placeholder="500000">
+    </div>
+    <div class="field" id="goalContributeField">
+      <label for="fGoalContribute">Aportar o retirar (CLP, +/-)</label>
+      <input id="fGoalContribute" type="number" inputmode="numeric" placeholder="10000">
+    </div>
+    <div class="field">
+      <label>Color</label>
+      <div class="color-grid" id="goalColorGrid"></div>
+    </div>
+    <div class="row" style="gap:10px;margin-top:4px">
+      <button class="btn btn-ghost" id="btnGoalCancel" type="button" style="flex:1">Cancelar</button>
+      <button class="btn btn-primary" id="btnGoalSave" type="button" style="flex:1">Guardar</button>
+    </div>
+    <button class="btn btn-danger" id="btnGoalDelete" type="button" style="display:none">Eliminar meta</button>
+  </div>
+</div>
+
+<!-- Shared person modal -->
+<div class="modal-overlay" id="modalSharedPerson">
+  <div class="modal">
+    <h3>Nueva persona</h3>
+    <div class="field">
+      <label for="fSharedPersonName">Nombre</label>
+      <input id="fSharedPersonName" type="text" placeholder="Nombre de la persona">
+    </div>
+    <div class="row" style="gap:10px;margin-top:4px">
+      <button class="btn btn-ghost" id="btnSharedPersonCancel" type="button" style="flex:1">Cancelar</button>
+      <button class="btn btn-primary" id="btnSharedPersonSave" type="button" style="flex:1">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shared person detail modal -->
+<div class="modal-overlay" id="modalSharedDetail">
+  <div class="modal">
+    <h3 id="sharedDetailName">Persona</h3>
+    <p class="small muted" id="sharedDetailNet" style="margin:0"></p>
+    <div class="list" id="sharedDetailEntries"></div>
+    <div class="field">
+      <label for="fSharedEntryDesc">Descripción</label>
+      <input id="fSharedEntryDesc" type="text" placeholder="Cena, arriendo, supermercado...">
+    </div>
+    <div class="toggle-row">
+      <button type="button" class="sel" data-shareddir="owed_to_me">Me debe</button>
+      <button type="button" data-shareddir="i_owe">Le debo</button>
+    </div>
+    <div class="field">
+      <label for="fSharedEntryAmount">Monto (CLP)</label>
+      <input id="fSharedEntryAmount" type="number" inputmode="numeric" min="1" placeholder="10000">
+    </div>
+    <button class="btn btn-primary" id="btnSharedEntryAdd" type="button">Agregar</button>
+    <div class="row" style="gap:10px;margin-top:4px">
+      <button class="btn btn-ghost" id="btnSharedSettle" type="button" style="flex:1">Marcar saldado</button>
+      <button class="btn btn-danger" id="btnSharedPersonDelete" type="button" style="flex:1">Eliminar persona</button>
+    </div>
+    <button class="btn btn-ghost" id="btnSharedDetailClose" type="button">Cerrar</button>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script>
@@ -620,6 +810,7 @@
     { id:'cafe', name:'Café y snacks', icon:'coffee', color:'#F2B705', kind:'expense' },
     { id:'entretenimiento', name:'Entretenimiento', icon:'film', color:'#A3E635', kind:'expense' },
     { id:'otros', name:'Otros', icon:'tag', color:'#94A3B8', kind:'expense' },
+    { id:'deudas', name:'Deudas', icon:'wallet', color:'#60A5FA', kind:'expense' },
     { id:'ingresos', name:'Ingresos', icon:'coin', color:'#34D399', kind:'income' }
   ];
   var DEFAULT_ACCOUNTS = [
@@ -653,12 +844,19 @@
       var s = JSON.parse(raw);
       if(!s.categories || !s.categories.length) s.categories = DEFAULT_CATEGORIES.slice();
       s.categories.forEach(function(c){ if(!c.kind) c.kind = c.id==='ingresos' ? 'income' : 'expense'; });
+      if(!s.categories.some(function(c){return c.id==='deudas';})) s.categories.push({ id:'deudas', name:'Deudas', icon:'wallet', color:'#60A5FA', kind:'expense' });
       if(!s.accounts || !s.accounts.length) s.accounts = DEFAULT_ACCOUNTS.slice();
       s.transactions = s.transactions || [];
       s.transactions.forEach(function(t){ if(!t.accountId) t.accountId = s.accounts[0].id; });
       s.budgets = s.budgets || [];
       s.recurring = s.recurring || [];
       s.chat = s.chat || [];
+      s.debts = s.debts || [];
+      s.goals = s.goals || [];
+      s.investments = s.investments || [];
+      s.shared = s.shared || [];
+      s.dismissedSubscriptions = s.dismissedSubscriptions || [];
+      s.confirmedSubscriptions = s.confirmedSubscriptions || [];
       s.settings = Object.assign({}, DEFAULT_SETTINGS, s.settings || {});
       return s;
     }catch(e){ return seedState(); }
@@ -667,6 +865,8 @@
     return {
       categories: DEFAULT_CATEGORIES.slice(), accounts: DEFAULT_ACCOUNTS.slice(),
       transactions: [], budgets: [], recurring: [], chat: [],
+      debts: [], goals: [], investments: [], shared: [],
+      dismissedSubscriptions: [], confirmedSubscriptions: [],
       settings: Object.assign({}, DEFAULT_SETTINGS)
     };
   }
@@ -686,6 +886,14 @@
   var acctPickedColor = PALETTE[0];
   var kpAmountStr = '0';
   var kpRecurring = null; // null | 'monthly' | 'weekly'
+  var debtEditingId = null;
+  var debtPickedColor = PALETTE[0];
+  var debtPayingId = null;
+  var goalEditingId = null;
+  var goalPickedColor = PALETTE[0];
+  var investEditingId = null;
+  var investPickedColor = PALETTE[0];
+  var sharedActivePersonId = null;
 
   function catById(id){ return state.categories.find(function(c){return c.id===id;}) || state.categories[state.categories.length-1]; }
   function acctById(id){ return state.accounts.find(function(a){return a.id===id;}) || state.accounts[0]; }
@@ -721,6 +929,96 @@
     var sum = a.startBalance||0;
     state.transactions.forEach(function(t){ if(t.accountId===accountId) sum += t.amount; });
     return sum;
+  }
+  function totalAccountsBalance(){
+    return state.accounts.reduce(function(a,acc){ return a + accountBalance(acc.id); }, 0);
+  }
+  function debtTotal(){ return state.debts.reduce(function(a,d){ return a + (d.balance||0); }, 0); }
+  function investmentTotal(){ return state.investments.reduce(function(a,i){ return a + (i.value||0); }, 0); }
+  function netWorth(){ return totalAccountsBalance() + investmentTotal() - debtTotal(); }
+  function debtById(id){ return state.debts.find(function(d){return d.id===id;}); }
+  function goalById(id){ return state.goals.find(function(g){return g.id===id;}); }
+  function investmentById(id){ return state.investments.find(function(i){return i.id===id;}); }
+  function sharedPersonById(id){ return state.shared.find(function(p){return p.id===id;}); }
+  function sharedPersonNet(person){
+    return (person.entries||[]).reduce(function(a,e){ return a + e.amount; }, 0);
+  }
+
+  function cashFlowForecast(){
+    var balance = totalAccountsBalance();
+    var now = new Date();
+    var monthEndISO = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(new Date(now.getFullYear(), now.getMonth()+1, 0).getDate()).padStart(2,'0');
+    var projected = 0;
+    state.recurring.forEach(function(r){
+      if(!r.active) return;
+      var d = r.nextDate;
+      var guard = 0;
+      while(d <= monthEndISO && guard < 40){
+        projected += r.amount;
+        d = addInterval(d, r.freq);
+        guard++;
+      }
+    });
+    return balance + projected;
+  }
+
+  function financialHealthScore(){
+    var mk = monthKey();
+    var t = monthTotals(mk);
+    var savingsRate = t.income>0 ? (t.income-t.expense)/t.income : (t.expense>0 ? -0.3 : 0);
+    var savingsScore = Math.max(0, Math.min(100, ((savingsRate + 0.2) / 0.5) * 100));
+
+    var cats = state.categories.filter(function(c){ return c.kind!=='income'; });
+    var withBudget = cats.filter(function(c){ return budgetFor(c.id, mk); });
+    var withinCount = withBudget.filter(function(c){ var b = budgetFor(c.id, mk); return categorySpend(c.id, mk) <= b.cap; }).length;
+    var budgetScore = withBudget.length ? (withinCount / withBudget.length * 100) : 65;
+
+    var debtScore = 100;
+    if(state.debts.length){
+      var totalDebt = debtTotal();
+      var incomeRef = t.income || monthTotals(lastNMonthKeys(3)[0]).income || 0;
+      var ratio = incomeRef>0 ? totalDebt/incomeRef : (totalDebt>0 ? 5 : 0);
+      debtScore = Math.max(0, Math.min(100, 100 - ratio*20));
+    }
+
+    var score = Math.round(savingsScore*0.4 + budgetScore*0.3 + debtScore*0.3);
+    var verdict = score>=70 ? {label:'Buena', color:'var(--green)'} : score>=40 ? {label:'Regular', color:'var(--orange)'} : {label:'Atención', color:'var(--red)'};
+    return { score:score, verdict:verdict, savingsScore:Math.round(savingsScore), budgetScore:Math.round(budgetScore), debtScore:Math.round(debtScore) };
+  }
+
+  function normalizeDesc(s){
+    return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  }
+  function detectSubscriptions(){
+    var groups = {};
+    state.transactions.forEach(function(t){
+      if(t.isTransfer || t.amount>=0) return;
+      var key = normalizeDesc(t.description);
+      if(!key) return;
+      (groups[key] = groups[key] || []).push(t);
+    });
+    var candidates = [];
+    Object.keys(groups).forEach(function(key){
+      if(state.dismissedSubscriptions.indexOf(key)>-1) return;
+      if(state.confirmedSubscriptions.some(function(s){return s.signature===key;})) return;
+      var list = groups[key];
+      if(list.length<2) return;
+      var months = {};
+      list.forEach(function(t){ months[monthKey(t.date)] = true; });
+      if(Object.keys(months).length<2) return;
+      var amounts = list.map(function(t){ return Math.abs(t.amount); });
+      var avg = amounts.reduce(function(a,b){return a+b;},0)/amounts.length;
+      var variance = (Math.max.apply(null,amounts) - Math.min.apply(null,amounts)) / avg;
+      if(variance>0.2) return;
+      list.sort(function(a,b){ return a.date<b.date?-1:1; });
+      candidates.push({
+        signature:key, name:list[list.length-1].description || key,
+        monthlyEstimate: Math.round(avg), totalPaid: Math.round(amounts.reduce(function(a,b){return a+b;},0)),
+        firstSeen: list[0].date, count: list.length
+      });
+    });
+    candidates.sort(function(a,b){ return b.monthlyEstimate-a.monthlyEstimate; });
+    return candidates;
   }
 
   function iconSvg(iconKey, color, size){
@@ -789,7 +1087,7 @@
     currentView = v;
     document.querySelectorAll('.view').forEach(function(el){ el.classList.toggle('active', el.dataset.view===v); });
     document.querySelectorAll('.navbtn').forEach(function(el){ el.classList.toggle('active', el.dataset.nav===v); });
-    var titles = { activity:'Actividad', summary:'Resumen', budgets:'Presupuesto', analysis:'Análisis', accounts:'Cuentas', categories:'Categorías', chat:'Asistente', settings:'Ajustes' };
+    var titles = { activity:'Actividad', summary:'Resumen', budgets:'Presupuesto', analysis:'Análisis', accounts:'Cuentas', categories:'Categorías', chat:'Asistente', settings:'Ajustes', networth:'Patrimonio', subscriptions:'Suscripciones', shared:'Compartido' };
     document.getElementById('viewTitle').textContent = titles[v] || 'Finsy';
     var mainNavViews = { activity:1, summary:1, budgets:1, analysis:1, accounts:1 };
     document.querySelector('.fab').style.display = mainNavViews[v] ? 'block' : 'none';
@@ -801,11 +1099,15 @@
     renderActivity();
     renderSummary();
     renderBudgets();
+    renderGoals();
     renderAnalysis();
     renderAccounts();
     renderCategoryMgmt();
     renderChat();
     renderCloudSettings();
+    renderNetWorth();
+    renderSubscriptions();
+    renderShared();
   }
 
   function emptyState(icon, text){
@@ -904,6 +1206,16 @@
 
   // ---- RESUMEN ----
   function renderSummary(){
+    var health = financialHealthScore();
+    var healthEl = document.getElementById('healthCard');
+    if(healthEl){
+      healthEl.innerHTML = '<div class="row">'
+        +'<div style="flex:1"><span class="small muted">Salud financiera</span>'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-top:3px"><b style="font-size:18px;color:'+health.verdict.color+'">'+health.verdict.label+'</b><span class="xsmall faint">'+health.score+'/100</span></div></div>'
+        +ringSvg(health.score, health.verdict.color, 44)
+        +'</div>'
+        +'<div class="xsmall faint" style="margin-top:8px">Ahorro '+health.savingsScore+' · Presupuesto '+health.budgetScore+' · Deuda '+health.debtScore+'</div>';
+    }
     var row = document.getElementById('summaryFilterRow');
     var chips = ['<button type="button" class="chip'+(summaryFilter===null?' active':'')+'" data-sf="">Todas las cuentas</button>']
       .concat(state.accounts.map(function(a){
@@ -989,6 +1301,13 @@
     return out;
   }
   function renderAnalysis(){
+    var forecastEl = document.getElementById('forecastCard');
+    if(forecastEl){
+      var forecast = cashFlowForecast();
+      forecastEl.innerHTML = '<span class="small muted">Proyección a fin de mes</span>'
+        +'<span class="amount" style="font-family:\'Space Grotesk\',sans-serif;font-weight:700;font-size:22px;color:'+(forecast<0?'var(--red)':'var(--text)')+'">'+fmtMaybeHidden(forecast)+'</span>'
+        +'<span class="xsmall faint">Saldo actual más tus gastos e ingresos recurrentes que faltan este mes</span>';
+    }
     var months = lastNMonthKeys(6);
     var data = months.map(function(mk){ return monthTotals(mk); });
     var cur = data[data.length-1];
@@ -1337,6 +1656,400 @@
     toast('Transferencia realizada');
   }
 
+  // ---------- patrimonio: inversiones y deudas ----------
+
+  function renderNetWorth(){
+    var totalEl = document.getElementById('nwTotal');
+    if(!totalEl) return;
+    totalEl.textContent = fmtMaybeHidden(netWorth());
+    document.getElementById('nwBreakdown').textContent = 'Cuentas '+fmtMaybeHidden(totalAccountsBalance())+' + Inversiones '+fmt(investmentTotal())+' − Deudas '+fmt(debtTotal());
+
+    var investEl = document.getElementById('investList');
+    if(!state.investments.length){
+      investEl.innerHTML = emptyState('wallet','Agrega tus inversiones (APV, fondos, acciones) para ver tu patrimonio real.');
+    } else {
+      investEl.innerHTML = state.investments.map(function(i){
+        return '<button type="button" class="tx-row" data-invest="'+i.id+'">'
+          +'<div class="icon-circle" style="border-color:'+esc(i.color)+';background:color-mix(in srgb, '+esc(i.color)+' 16%, transparent)">'+iconSvg('piggy',i.color)+'</div>'
+          +'<span class="tx-meta"><span class="name">'+esc(i.name)+'</span></span>'
+          +'<b style="font-size:14px">'+fmtMaybeHidden(i.value)+'</b>'
+          +'</button>';
+      }).join('');
+    }
+    investEl.querySelectorAll('[data-invest]').forEach(function(btn){
+      btn.addEventListener('click', function(){ openInvestmentModal(btn.dataset.invest); });
+    });
+
+    var debtEl = document.getElementById('debtList');
+    if(!state.debts.length){
+      debtEl.innerHTML = emptyState('wallet','Sin deudas registradas. Agrega una tarjeta o crédito para seguirle la pista.');
+    } else {
+      debtEl.innerHTML = state.debts.map(function(d){
+        return '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
+          +'<div class="row" data-debt="'+d.id+'" style="cursor:pointer">'
+            +'<div class="icon-circle" style="border-color:'+esc(d.color)+';background:color-mix(in srgb, '+esc(d.color)+' 16%, transparent)">'+iconSvg('wallet',d.color)+'</div>'
+            +'<span class="tx-meta"><span class="name">'+esc(d.name)+'</span>'+(d.apr?('<span class="xsmall faint">'+d.apr+'% anual</span>'):'')+'</span>'
+            +'<b style="font-size:14px">'+fmtMaybeHidden(d.balance)+'</b>'
+          +'</div>'
+          +'<button type="button" class="btn btn-ghost" data-debtpay="'+d.id+'" style="padding:9px">Pagar</button>'
+        +'</div>';
+      }).join('');
+    }
+    debtEl.querySelectorAll('[data-debt]').forEach(function(row){
+      row.addEventListener('click', function(){ openDebtModal(row.dataset.debt); });
+    });
+    debtEl.querySelectorAll('[data-debtpay]').forEach(function(btn){
+      btn.addEventListener('click', function(){ openDebtPayModal(btn.dataset.debtpay); });
+    });
+  }
+
+  function renderInvestColorPicker(){
+    var cg = document.getElementById('investColorGrid');
+    cg.innerHTML = PALETTE.map(function(col){
+      return '<button type="button" class="'+(col===investPickedColor?'sel':'')+'" data-color="'+col+'" style="background:'+col+'"></button>';
+    }).join('');
+    cg.querySelectorAll('[data-color]').forEach(function(b){
+      b.addEventListener('click', function(){ investPickedColor=b.dataset.color; cg.querySelectorAll('button').forEach(function(x){x.classList.toggle('sel',x===b);}); });
+    });
+  }
+  function openInvestmentModal(id){
+    investEditingId = id || null;
+    var i = id ? investmentById(id) : null;
+    document.getElementById('investmentModalTitle').textContent = i ? 'Editar inversión' : 'Nueva inversión';
+    document.getElementById('fInvestName').value = i ? i.name : '';
+    document.getElementById('fInvestValue').value = i ? i.value : '';
+    investPickedColor = i ? i.color : PALETTE[Math.floor(Math.random()*PALETTE.length)];
+    renderInvestColorPicker();
+    document.getElementById('btnInvestmentDelete').style.display = i ? 'flex' : 'none';
+    document.getElementById('modalInvestment').classList.add('open');
+  }
+  function closeInvestmentModal(){ document.getElementById('modalInvestment').classList.remove('open'); }
+  function saveInvestmentModal(){
+    var name = document.getElementById('fInvestName').value.trim();
+    if(!name){ toast('Ponle un nombre a la inversión'); return; }
+    var value = parseInt(document.getElementById('fInvestValue').value, 10) || 0;
+    if(investEditingId){
+      var i = investmentById(investEditingId);
+      i.name = name; i.value = value; i.color = investPickedColor;
+    } else {
+      state.investments.push({ id: uid(), name:name, value:value, color:investPickedColor });
+    }
+    saveState();
+    closeInvestmentModal();
+    renderAll();
+    toast('Inversión guardada');
+  }
+  function deleteInvestmentModal(){
+    if(!investEditingId) return;
+    if(!confirm('¿Eliminar esta inversión?')) return;
+    state.investments = state.investments.filter(function(i){return i.id!==investEditingId;});
+    saveState();
+    closeInvestmentModal();
+    renderAll();
+    toast('Inversión eliminada');
+  }
+
+  function renderDebtColorPicker(){
+    var cg = document.getElementById('debtColorGrid');
+    cg.innerHTML = PALETTE.map(function(col){
+      return '<button type="button" class="'+(col===debtPickedColor?'sel':'')+'" data-color="'+col+'" style="background:'+col+'"></button>';
+    }).join('');
+    cg.querySelectorAll('[data-color]').forEach(function(b){
+      b.addEventListener('click', function(){ debtPickedColor=b.dataset.color; cg.querySelectorAll('button').forEach(function(x){x.classList.toggle('sel',x===b);}); });
+    });
+  }
+  function openDebtModal(id){
+    debtEditingId = id || null;
+    var d = id ? debtById(id) : null;
+    document.getElementById('debtModalTitle').textContent = d ? 'Editar deuda' : 'Nueva deuda';
+    document.getElementById('fDebtName').value = d ? d.name : '';
+    document.getElementById('fDebtBalance').value = d ? d.balance : '';
+    document.getElementById('fDebtApr').value = d ? (d.apr||'') : '';
+    debtPickedColor = d ? d.color : PALETTE[Math.floor(Math.random()*PALETTE.length)];
+    renderDebtColorPicker();
+    document.getElementById('btnDebtDelete').style.display = d ? 'flex' : 'none';
+    document.getElementById('modalDebt').classList.add('open');
+  }
+  function closeDebtModal(){ document.getElementById('modalDebt').classList.remove('open'); }
+  function saveDebtModal(){
+    var name = document.getElementById('fDebtName').value.trim();
+    if(!name){ toast('Ponle un nombre a la deuda'); return; }
+    var balance = parseInt(document.getElementById('fDebtBalance').value, 10) || 0;
+    var apr = parseFloat(document.getElementById('fDebtApr').value) || 0;
+    if(debtEditingId){
+      var d = debtById(debtEditingId);
+      d.name = name; d.balance = balance; d.apr = apr; d.color = debtPickedColor;
+    } else {
+      state.debts.push({ id: uid(), name:name, balance:balance, apr:apr, color:debtPickedColor });
+    }
+    saveState();
+    closeDebtModal();
+    renderAll();
+    toast('Deuda guardada');
+  }
+  function deleteDebtModal(){
+    if(!debtEditingId) return;
+    if(!confirm('¿Eliminar esta deuda?')) return;
+    state.debts = state.debts.filter(function(d){return d.id!==debtEditingId;});
+    saveState();
+    closeDebtModal();
+    renderAll();
+    toast('Deuda eliminada');
+  }
+
+  function openDebtPayModal(id){
+    debtPayingId = id;
+    var d = debtById(id);
+    document.getElementById('debtPayModalTitle').textContent = 'Pagar · '+d.name;
+    var sel = document.getElementById('fDebtPayAccount');
+    sel.innerHTML = state.accounts.map(function(a){ return '<option value="'+a.id+'">'+esc(a.name)+'</option>'; }).join('');
+    document.getElementById('fDebtPayAmount').value = '';
+    document.getElementById('modalDebtPay').classList.add('open');
+  }
+  function closeDebtPayModal(){ document.getElementById('modalDebtPay').classList.remove('open'); }
+  function saveDebtPayModal(){
+    var d = debtById(debtPayingId);
+    if(!d) return;
+    var amount = parseInt(document.getElementById('fDebtPayAmount').value, 10);
+    if(!amount || amount<=0){ toast('Ingresa un monto válido'); return; }
+    var accountId = document.getElementById('fDebtPayAccount').value;
+    state.transactions.push({ id:uid(), amount:-Math.abs(amount), categoryId:'deudas', accountId:accountId, description:'Pago '+d.name, date:todayISO(), createdAt:Date.now().toString(36), source:'debt_payment' });
+    d.balance = Math.max(0, d.balance - amount);
+    saveState();
+    closeDebtPayModal();
+    renderAll();
+    vibrate(16);
+    toast('Pago registrado');
+  }
+
+  // ---------- metas de ahorro ----------
+
+  function renderGoals(){
+    var el = document.getElementById('goalList');
+    if(!el) return;
+    if(!state.goals.length){
+      el.innerHTML = emptyState('piggy','Crea una meta para empezar a ahorrar para algo concreto.');
+    } else {
+      el.innerHTML = state.goals.map(function(g){
+        var pct = g.target>0 ? Math.min(100, Math.round(g.saved/g.target*100)) : 0;
+        return '<button type="button" class="card" data-goal="'+g.id+'" style="display:flex;flex-direction:column;gap:10px;text-align:left;color:inherit;width:100%">'
+          +'<div class="row">'
+            +'<div class="icon-circle" style="border-color:'+esc(g.color)+';background:color-mix(in srgb, '+esc(g.color)+' 16%, transparent)">'+iconSvg('piggy',g.color)+'</div>'
+            +'<span style="flex:1;font-weight:600;font-size:14px">'+esc(g.name)+'</span>'
+            +'<span class="small muted">'+fmtMaybeHidden(g.saved)+' / '+fmt(g.target)+'</span>'
+          +'</div>'
+          +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background-color:'+esc(g.color)+'"></div></div>'
+        +'</button>';
+      }).join('');
+    }
+    el.querySelectorAll('[data-goal]').forEach(function(btn){
+      btn.addEventListener('click', function(){ openGoalModal(btn.dataset.goal); });
+    });
+  }
+  function renderGoalColorPicker(){
+    var cg = document.getElementById('goalColorGrid');
+    cg.innerHTML = PALETTE.map(function(col){
+      return '<button type="button" class="'+(col===goalPickedColor?'sel':'')+'" data-color="'+col+'" style="background:'+col+'"></button>';
+    }).join('');
+    cg.querySelectorAll('[data-color]').forEach(function(b){
+      b.addEventListener('click', function(){ goalPickedColor=b.dataset.color; cg.querySelectorAll('button').forEach(function(x){x.classList.toggle('sel',x===b);}); });
+    });
+  }
+  function openGoalModal(id){
+    goalEditingId = id || null;
+    var g = id ? goalById(id) : null;
+    document.getElementById('goalModalTitle').textContent = g ? 'Editar meta' : 'Nueva meta';
+    document.getElementById('fGoalName').value = g ? g.name : '';
+    document.getElementById('fGoalTarget').value = g ? g.target : '';
+    document.getElementById('fGoalContribute').value = '';
+    document.getElementById('goalContributeField').style.display = g ? 'flex' : 'none';
+    goalPickedColor = g ? g.color : PALETTE[Math.floor(Math.random()*PALETTE.length)];
+    renderGoalColorPicker();
+    document.getElementById('btnGoalDelete').style.display = g ? 'flex' : 'none';
+    document.getElementById('modalGoal').classList.add('open');
+  }
+  function closeGoalModal(){ document.getElementById('modalGoal').classList.remove('open'); }
+  function saveGoalModal(){
+    var name = document.getElementById('fGoalName').value.trim();
+    if(!name){ toast('Ponle un nombre a la meta'); return; }
+    var target = parseInt(document.getElementById('fGoalTarget').value, 10) || 0;
+    var contribute = parseInt(document.getElementById('fGoalContribute').value, 10) || 0;
+    if(goalEditingId){
+      var g = goalById(goalEditingId);
+      g.name = name; g.target = target; g.color = goalPickedColor;
+      g.saved = Math.max(0, (g.saved||0) + contribute);
+    } else {
+      state.goals.push({ id: uid(), name:name, target:target, saved:Math.max(0,contribute), color:goalPickedColor });
+    }
+    saveState();
+    closeGoalModal();
+    renderAll();
+    toast('Meta guardada');
+  }
+  function deleteGoalModal(){
+    if(!goalEditingId) return;
+    if(!confirm('¿Eliminar esta meta?')) return;
+    state.goals = state.goals.filter(function(g){return g.id!==goalEditingId;});
+    saveState();
+    closeGoalModal();
+    renderAll();
+    toast('Meta eliminada');
+  }
+
+  // ---------- suscripciones detectadas ----------
+
+  function renderSubscriptions(){
+    var candEl = document.getElementById('subCandidateList');
+    if(!candEl) return;
+    var candidates = detectSubscriptions();
+    if(!candidates.length){
+      candEl.innerHTML = emptyState('repeat','Sin candidatas nuevas por ahora.');
+    } else {
+      candEl.innerHTML = candidates.map(function(c){
+        return '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
+          +'<div class="row">'
+            +'<div class="icon-circle" style="border-color:var(--accent);background:color-mix(in srgb, var(--accent) 16%, transparent)">'+iconSvg('repeat','var(--accent)')+'</div>'
+            +'<span class="tx-meta"><span class="name">'+esc(c.name)+'</span><span class="xsmall faint">~'+fmt(c.monthlyEstimate)+'/mes · desde '+niceDate(c.firstSeen)+'</span></span>'
+          +'</div>'
+          +'<div class="row" style="gap:10px">'
+            +'<button type="button" class="btn btn-ghost" data-subdismiss="'+esc(c.signature)+'" style="flex:1">Descartar</button>'
+            +'<button type="button" class="btn btn-primary" data-subconfirm="'+esc(c.signature)+'" data-subname="'+esc(c.name)+'" data-subfirst="'+esc(c.firstSeen)+'" style="flex:1">Confirmar</button>'
+          +'</div>'
+        +'</div>';
+      }).join('');
+    }
+    candEl.querySelectorAll('[data-subdismiss]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        state.dismissedSubscriptions.push(btn.dataset.subdismiss);
+        saveState(); renderSubscriptions();
+        toast('No se volverá a sugerir');
+      });
+    });
+    candEl.querySelectorAll('[data-subconfirm]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        state.confirmedSubscriptions.push({ signature:btn.dataset.subconfirm, name:btn.dataset.subname, firstSeen:btn.dataset.subfirst });
+        saveState(); renderSubscriptions();
+        toast('Suscripción confirmada');
+      });
+    });
+
+    var confEl = document.getElementById('subConfirmedList');
+    if(!state.confirmedSubscriptions.length){
+      confEl.innerHTML = emptyState('tag','Todavía no confirmas ninguna suscripción.');
+    } else {
+      confEl.innerHTML = state.confirmedSubscriptions.map(function(s){
+        var txs = state.transactions.filter(function(t){ return !t.isTransfer && t.amount<0 && normalizeDesc(t.description)===s.signature; });
+        var total = txs.reduce(function(a,t){ return a+Math.abs(t.amount); }, 0);
+        return '<div class="tx-row" style="cursor:default">'
+          +'<div class="icon-circle" style="border-color:var(--green);background:color-mix(in srgb, var(--green) 16%, transparent)">'+iconSvg('repeat','var(--green)')+'</div>'
+          +'<span class="tx-meta"><span class="name">'+esc(s.name)+'</span><span class="xsmall faint">desde '+niceDate(s.firstSeen)+'</span></span>'
+          +'<b style="font-size:14px">'+fmt(total)+'</b>'
+          +'</div>';
+      }).join('');
+    }
+  }
+
+  // ---------- compartido (quién debe a quién) ----------
+
+  var sharedEntryDir = 'owed_to_me';
+  function renderShared(){
+    var el = document.getElementById('sharedList');
+    if(!el) return;
+    if(!state.shared.length){
+      el.innerHTML = emptyState('wallet','Agrega a alguien para llevar la cuenta de gastos compartidos.');
+    } else {
+      el.innerHTML = state.shared.map(function(p){
+        var net = sharedPersonNet(p);
+        var label = net===0 ? 'Al día' : (net>0 ? 'Te debe '+fmt(net) : 'Le debes '+fmt(Math.abs(net)));
+        var color = net===0 ? 'var(--text-dim)' : (net>0 ? 'var(--green)' : 'var(--red)');
+        return '<button type="button" class="tx-row" data-sharedperson="'+p.id+'">'
+          +'<div class="icon-circle" style="border-color:'+color+';background:color-mix(in srgb, '+color+' 16%, transparent)">'+iconSvg('wallet',color)+'</div>'
+          +'<span class="tx-meta"><span class="name">'+esc(p.name)+'</span></span>'
+          +'<b style="font-size:14px;color:'+color+'">'+label+'</b>'
+          +'</button>';
+      }).join('');
+    }
+    el.querySelectorAll('[data-sharedperson]').forEach(function(btn){
+      btn.addEventListener('click', function(){ openSharedDetail(btn.dataset.sharedperson); });
+    });
+  }
+  function openSharedPersonModal(){
+    document.getElementById('fSharedPersonName').value = '';
+    document.getElementById('modalSharedPerson').classList.add('open');
+  }
+  function closeSharedPersonModal(){ document.getElementById('modalSharedPerson').classList.remove('open'); }
+  function saveSharedPersonModal(){
+    var name = document.getElementById('fSharedPersonName').value.trim();
+    if(!name){ toast('Ponle un nombre a la persona'); return; }
+    state.shared.push({ id: uid(), name:name, entries:[] });
+    saveState();
+    closeSharedPersonModal();
+    renderAll();
+    toast('Persona agregada');
+  }
+  function openSharedDetail(id){
+    sharedActivePersonId = id;
+    renderSharedDetail();
+    document.getElementById('modalSharedDetail').classList.add('open');
+  }
+  function closeSharedDetail(){ document.getElementById('modalSharedDetail').classList.remove('open'); }
+  function renderSharedDetail(){
+    var p = sharedPersonById(sharedActivePersonId);
+    if(!p) return;
+    document.getElementById('sharedDetailName').textContent = p.name;
+    var net = sharedPersonNet(p);
+    document.getElementById('sharedDetailNet').textContent = net===0 ? 'Al día' : (net>0 ? p.name+' te debe '+fmt(net) : 'Le debes '+fmt(Math.abs(net))+' a '+p.name);
+    var el = document.getElementById('sharedDetailEntries');
+    var entries = (p.entries||[]).slice().sort(function(a,b){ return a.date<b.date?1:-1; });
+    el.innerHTML = entries.length ? entries.map(function(e){
+      var isOwedToMe = e.amount>0;
+      return '<div class="tx-row" style="cursor:default">'
+        +'<span class="tx-meta"><span class="name">'+esc(e.desc||(isOwedToMe?'Me debe':'Le debo'))+'</span><span class="xsmall faint">'+niceDate(e.date)+'</span></span>'
+        +'<span class="'+(isOwedToMe?'amount-pos':'amount-neg')+'">'+(isOwedToMe?'+':'-')+fmt(Math.abs(e.amount))+'</span>'
+        +'</div>';
+    }).join('') : emptyState('tag','Sin movimientos todavía.');
+    document.getElementById('fSharedEntryDesc').value = '';
+    document.getElementById('fSharedEntryAmount').value = '';
+    sharedEntryDir = 'owed_to_me';
+    document.querySelectorAll('#modalSharedDetail [data-shareddir]').forEach(function(b){ b.classList.toggle('sel', b.dataset.shareddir===sharedEntryDir); });
+  }
+  function addSharedEntry(){
+    var p = sharedPersonById(sharedActivePersonId);
+    if(!p) return;
+    var amount = parseInt(document.getElementById('fSharedEntryAmount').value, 10);
+    if(!amount || amount<=0){ toast('Ingresa un monto válido'); return; }
+    var desc = document.getElementById('fSharedEntryDesc').value.trim();
+    var signed = sharedEntryDir==='owed_to_me' ? Math.abs(amount) : -Math.abs(amount);
+    p.entries = p.entries || [];
+    p.entries.push({ id:uid(), desc:desc, amount:signed, date:todayISO() });
+    saveState();
+    renderSharedDetail();
+    renderShared();
+    vibrate(16);
+    toast('Movimiento agregado');
+  }
+  function settleShared(){
+    var p = sharedPersonById(sharedActivePersonId);
+    if(!p) return;
+    var net = sharedPersonNet(p);
+    if(net===0){ toast('Ya está al día'); return; }
+    p.entries = p.entries || [];
+    p.entries.push({ id:uid(), desc:'Saldado', amount:-net, date:todayISO() });
+    saveState();
+    renderSharedDetail();
+    renderShared();
+    toast('Marcado como saldado');
+  }
+  function deleteSharedPerson(){
+    if(!sharedActivePersonId) return;
+    if(!confirm('¿Eliminar esta persona y su historial?')) return;
+    state.shared = state.shared.filter(function(p){return p.id!==sharedActivePersonId;});
+    saveState();
+    closeSharedDetail();
+    renderAll();
+    toast('Persona eliminada');
+  }
+
   // ---------- assistant ----------
 
   var MONEY_RE = /(\d[\d.,]*)\s*(mil|k)?/i;
@@ -1658,6 +2371,9 @@
   document.getElementById('btnSettings').addEventListener('click', function(){ setView('settings'); });
   document.getElementById('btnChat').addEventListener('click', function(){ setView('chat'); });
   document.getElementById('rowCategories').addEventListener('click', function(){ setView('categories'); });
+  document.getElementById('rowNetWorth').addEventListener('click', function(){ setView('networth'); });
+  document.getElementById('rowSubscriptions').addEventListener('click', function(){ setView('subscriptions'); });
+  document.getElementById('rowShared').addEventListener('click', function(){ setView('shared'); });
 
   document.getElementById('btnAdd').addEventListener('click', function(){ openKeypad(null); });
   document.getElementById('btnKeypadClose').addEventListener('click', closeKeypad);
@@ -1766,6 +2482,45 @@
       toast('Datos borrados');
     }
   });
+
+  document.getElementById('btnAddInvestment').addEventListener('click', function(){ openInvestmentModal(null); });
+  document.getElementById('btnInvestmentCancel').addEventListener('click', closeInvestmentModal);
+  document.getElementById('btnInvestmentSave').addEventListener('click', saveInvestmentModal);
+  document.getElementById('btnInvestmentDelete').addEventListener('click', deleteInvestmentModal);
+  document.getElementById('modalInvestment').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeInvestmentModal(); });
+
+  document.getElementById('btnAddDebt').addEventListener('click', function(){ openDebtModal(null); });
+  document.getElementById('btnDebtCancel').addEventListener('click', closeDebtModal);
+  document.getElementById('btnDebtSave').addEventListener('click', saveDebtModal);
+  document.getElementById('btnDebtDelete').addEventListener('click', deleteDebtModal);
+  document.getElementById('modalDebt').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeDebtModal(); });
+
+  document.getElementById('btnDebtPayCancel').addEventListener('click', closeDebtPayModal);
+  document.getElementById('btnDebtPaySave').addEventListener('click', saveDebtPayModal);
+  document.getElementById('modalDebtPay').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeDebtPayModal(); });
+
+  document.getElementById('btnAddGoal').addEventListener('click', function(){ openGoalModal(null); });
+  document.getElementById('btnGoalCancel').addEventListener('click', closeGoalModal);
+  document.getElementById('btnGoalSave').addEventListener('click', saveGoalModal);
+  document.getElementById('btnGoalDelete').addEventListener('click', deleteGoalModal);
+  document.getElementById('modalGoal').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeGoalModal(); });
+
+  document.getElementById('btnAddSharedPerson').addEventListener('click', openSharedPersonModal);
+  document.getElementById('btnSharedPersonCancel').addEventListener('click', closeSharedPersonModal);
+  document.getElementById('btnSharedPersonSave').addEventListener('click', saveSharedPersonModal);
+  document.getElementById('modalSharedPerson').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeSharedPersonModal(); });
+
+  document.querySelectorAll('#modalSharedDetail [data-shareddir]').forEach(function(b){
+    b.addEventListener('click', function(){
+      sharedEntryDir = b.dataset.shareddir;
+      document.querySelectorAll('#modalSharedDetail [data-shareddir]').forEach(function(x){x.classList.toggle('sel',x===b);});
+    });
+  });
+  document.getElementById('btnSharedEntryAdd').addEventListener('click', addSharedEntry);
+  document.getElementById('btnSharedSettle').addEventListener('click', settleShared);
+  document.getElementById('btnSharedPersonDelete').addEventListener('click', deleteSharedPerson);
+  document.getElementById('btnSharedDetailClose').addEventListener('click', closeSharedDetail);
+  document.getElementById('modalSharedDetail').addEventListener('click', function(e){ if(e.target===e.currentTarget) closeSharedDetail(); });
 
   // ---------- cloud sync (bank connection) ----------
 
