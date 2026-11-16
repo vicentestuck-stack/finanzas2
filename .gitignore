@@ -13,6 +13,11 @@ node_modules/
 # Packaged build artifact (source files are tracked instead)
 *.zip
 
+# design-taste-frontend build/check artifacts (Chrome profiles, screenshots, gate logs)
+landing/.taste-skill/
+landing/shots/
+landing/*.log
+
 # OS cruft
 .DS_Store
 Thumbs.db

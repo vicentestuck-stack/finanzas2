@@ -23,8 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Combine the app (site root) and the landing page (/landing)
+        run: |
+          mkdir -p site
+          cp -r pwa/. site/
+          mkdir -p site/landing
+          cp -r landing/. site/landing/
+          rm -rf site/landing/.taste-skill
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: pwa
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v4
