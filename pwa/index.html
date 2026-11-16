@@ -2741,6 +2741,17 @@
   } else {
     initCloud();
   }
+
+  // iOS often "wakes up" an already-running home-screen web app instead of
+  // reloading it, so a fresh ?rapido= link via webapp:// never re-runs this
+  // script. Re-check the URL whenever the page becomes visible again.
+  window.addEventListener('pageshow', function(){
+    var q = (new URLSearchParams(location.search)).get('rapido');
+    if(q && document.getElementById('app').style.display === 'flex'){
+      pendingQuickCategory = q;
+      maybeOpenQuickAdd();
+    }
+  });
 })();
 </script>
 </body>
