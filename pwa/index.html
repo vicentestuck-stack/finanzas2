@@ -477,6 +477,8 @@
   <div class="keypad-grid" id="kpGrid"></div>
   <div class="keypad-bottom">
     <button class="round-btn" id="btnKpMic" type="button" aria-label="Dictar monto por voz"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg></button>
+    <button class="round-btn" id="btnKpReceipt" type="button" aria-label="Escanear recibo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+    <input type="file" id="kpReceiptFile" accept="image/*" capture="environment" class="vis-hidden">
     <button class="btn btn-primary" id="btnKpSave" type="button">Guardar</button>
   </div>
 </div>
@@ -1361,7 +1363,7 @@
   function guessCategory(text){
     var lower = text.toLowerCase();
     var synonyms = {
-      vivienda:['arriendo','vivienda','gastos comunes','luz','agua','gas'],
+      vivienda:['arriendo','vivienda','gastos comunes','luz','agua','gas','enel','cge','metrogas','aguas andinas','essbio','essal'],
       supermercado:['super','jumbo','lider','tottus','supermercado','unimarc'],
       transporte:['uber','taxi','metro','bencina','transporte','bus','didi','cabify'],
       delivery:['delivery','rappi','pedidosya','uber eats'],
@@ -1438,6 +1440,69 @@
     rec.onresult = function(e){ onText(e.results[0][0].transcript); };
     rec.onerror = function(){ toast('No se pudo escuchar. Intenta de nuevo.'); };
     try{ rec.start(); toast('Escuchando…'); }catch(e){ toast('No se pudo iniciar el dictado'); }
+  }
+
+  // ---------- receipt scanning (AI) ----------
+
+  function compressImageFile(file, maxDim){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function(){
+        URL.revokeObjectURL(url);
+        var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        var w = Math.max(1, Math.round(img.width * scale));
+        var h = Math.max(1, Math.round(img.height * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        resolve(dataUrl.slice(dataUrl.indexOf(',') + 1));
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
+      img.src = url;
+    });
+  }
+
+  function scanReceiptPhoto(file){
+    if(!CLOUD_ENABLED){ toast('El escaneo de recibos necesita que conectes tu cuenta en Ajustes'); return; }
+    if(!cloudSession){ toast('Inicia sesión y conéctate a internet para escanear un recibo'); return; }
+    if(!navigator.onLine){ toast('Necesitas internet para escanear un recibo'); return; }
+    var btn = document.getElementById('btnKpReceipt');
+    btn.disabled = true;
+    toast('Leyendo recibo…');
+    compressImageFile(file, 1200).then(function(base64){
+      return fetch(CLOUD_CONFIG.BACKEND_URL + '/api/receipts/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cloudSession.access_token },
+        body: JSON.stringify({ image: base64, mediaType: 'image/jpeg' })
+      });
+    }).then(function(r){ return r.json().then(function(json){ return { ok: r.ok, json: json }; }); })
+      .then(function(res){
+        if(!res.ok){
+          toast(res.json && res.json.message ? res.json.message : 'No se pudo leer el recibo');
+          return;
+        }
+        var data = res.json;
+        if(data.amount){
+          kpAmountStr = String(Math.abs(Math.round(data.amount)));
+          document.getElementById('kpAmount').textContent = kpAmountStr;
+        }
+        if(data.merchant && !document.getElementById('kpDesc').value){
+          document.getElementById('kpDesc').value = data.merchant;
+          var catId = guessCategory(data.merchant);
+          var catBtn = document.querySelector('#kpCatRow [data-kpcat="'+catId+'"]');
+          if(catBtn){ document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){x.classList.remove('active');}); catBtn.classList.add('active'); }
+        }
+        if(data.date){ document.getElementById('kpDate').value = data.date; }
+        if(!data.amount && !data.merchant){
+          toast('No pude leer el recibo con claridad. Revisa los datos antes de guardar.');
+        } else {
+          toast('Recibo leído. Revisa los datos antes de guardar.');
+        }
+      }).catch(function(){
+        toast('No se pudo escanear el recibo (revisa tu conexión)');
+      }).finally(function(){ btn.disabled = false; });
   }
 
   // ---------- export / import / reset ----------
@@ -1626,6 +1691,13 @@
       var catBtn = document.querySelector('#kpCatRow [data-kpcat="'+catId+'"]');
       if(catBtn){ document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){x.classList.remove('active');}); catBtn.classList.add('active'); }
     });
+  });
+  document.getElementById('btnKpReceipt').addEventListener('click', function(){
+    document.getElementById('kpReceiptFile').click();
+  });
+  document.getElementById('kpReceiptFile').addEventListener('change', function(e){
+    if(e.target.files && e.target.files[0]) scanReceiptPhoto(e.target.files[0]);
+    e.target.value = '';
   });
 
   document.getElementById('btnBudgetCancel').addEventListener('click', closeBudgetModal);

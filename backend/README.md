@@ -54,6 +54,9 @@ using the names in `.env.example`:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `FINTOC_SECRET_KEY`
+- `GEMINI_API_KEY` — free, from aistudio.google.com/apikey (no card
+  needed). Only needed for the "scan receipt" feature; everything else
+  works without it.
 - `ALLOWED_ORIGIN` — the URL where you host the Finsy app (the PWA). `*`
   works while testing locally.
 
@@ -78,6 +81,7 @@ are safe to ship inside the app, same idea as a Stripe publishable key).
 | `POST /api/sync` | pulls new movements from Fintoc for every connected account, stores them, returns the user's transactions |
 | `GET /api/bank/status` | tells the app whether a bank is already connected |
 | `DELETE /api/bank/disconnect` | marks a connection as disconnected (stops syncing it) |
+| `POST /api/receipts/scan` | reads a receipt photo (base64) with Gemini's free vision API, returns `{amount, merchant, date}` |
 
 Every route requires `Authorization: Bearer <supabase_access_token>` — the
 app gets that token from `supabase.auth.signIn...` and sends it along.
