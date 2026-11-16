@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "finsy-pwa",
+      "runtimeExecutable": "C:\\Users\\Vicente Arias\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+      "runtimeArgs": ["-m", "http.server", "8743", "--directory", "pwa"],
+      "port": 8743
+    }
+  ]
+}
