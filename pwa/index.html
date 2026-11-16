@@ -2753,15 +2753,6 @@
     }
   });
 
-  // Temporary diagnostic: shows exactly what URL this launch received, so
-  // we can see from the real device whether webapp:// is even passing the
-  // query string through. Safe to remove once the deep link is confirmed.
-  setTimeout(function(){
-    var el = document.getElementById('toast');
-    el.textContent = 'DEBUG URL: ' + (location.href.length > 70 ? location.href.slice(0,70)+'…' : location.href);
-    el.classList.add('show');
-    setTimeout(function(){ el.classList.remove('show'); }, 6000);
-  }, 600);
 })();
 </script>
 </body>
