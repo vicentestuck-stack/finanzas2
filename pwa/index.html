@@ -134,6 +134,9 @@
 -->
 <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js" defer></script>
 <script src="https://js.fintoc.com/v1/" defer></script>
+<!-- Lee el Excel que exporta el banco (.xls/.xlsx) para "Importar movimientos del banco".
+     Si no hay internet para cargar esto, ese botón avisa y el resto de la app sigue igual. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 </head>
 <body>
 <div id="app">
@@ -275,6 +278,13 @@
         <label class="btn btn-ghost" style="display:flex" for="importFile">Importar respaldo</label>
         <input type="file" id="importFile" accept="application/json" class="vis-hidden">
         <button class="btn btn-danger" id="btnReset" type="button">Borrar todos los datos</button>
+      </div>
+
+      <div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <span style="font-weight:600;font-size:14.5px">Importar movimientos del banco</span>
+        <p class="small muted" style="margin:0">Sube el Excel que exporta tu banco (columnas Fecha, Descripción, Cargo, Abono, Saldo). Los movimientos que ya tengas no se duplican.</p>
+        <label class="btn btn-ghost" style="display:flex" for="importBankFile">Elegir archivo (.xls, .xlsx)</label>
+        <input type="file" id="importBankFile" accept=".xls,.xlsx" class="vis-hidden">
       </div>
 
       <div class="card" style="display:flex;flex-direction:column;gap:6px">
@@ -743,6 +753,18 @@
     return Math.round(val);
   }
 
+  function hasWord(haystack, word){
+    function isAlnum(c){ return !!c && /[a-z0-9]/i.test(c); }
+    var idx = haystack.indexOf(word);
+    while(idx > -1){
+      var before = idx>0 ? haystack[idx-1] : '';
+      var after = idx+word.length < haystack.length ? haystack[idx+word.length] : '';
+      if(!isAlnum(before) && !isAlnum(after)) return true;
+      idx = haystack.indexOf(word, idx+1);
+    }
+    return false;
+  }
+
   function guessCategory(text){
     var lower = text.toLowerCase();
     var synonyms = {
@@ -755,7 +777,7 @@
       ingresos:['sueldo','pago','ingreso','depósito','deposito']
     };
     for(var id in synonyms){
-      if(synonyms[id].some(function(w){ return lower.indexOf(w)>-1; })) return id;
+      if(synonyms[id].some(function(w){ return hasWord(lower, w); })) return id;
     }
     for(var i=0;i<state.categories.length;i++){
       if(lower.indexOf(state.categories[i].name.toLowerCase())>-1) return state.categories[i].id;
@@ -848,6 +870,99 @@
     reader.readAsText(file);
   }
 
+  // ---------- import bank Excel (Fecha, Descripción, Cargo, Abono, Saldo) ----------
+
+  function parseCLPAmount(v){
+    if(v===undefined || v===null) return null;
+    if(typeof v==='number') return Math.round(v);
+    var s = String(v).trim();
+    if(!s) return null;
+    s = s.replace(/[^\d.,-]/g,'');
+    if(!s) return null;
+    s = s.replace(/\./g,'');
+    var n = parseFloat(s);
+    return isNaN(n) ? null : Math.round(n);
+  }
+
+  function parseBankDate(v){
+    if(v===undefined || v===null) return null;
+    if(v instanceof Date && !isNaN(v)){
+      return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+    }
+    if(typeof v==='number'){
+      var d = new Date(Math.round((v - 25569) * 86400 * 1000));
+      return isNaN(d) ? null : d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    }
+    var s = String(v).trim();
+    var m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+    m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+    return null;
+  }
+
+  function simpleHash(s){
+    var h = 0;
+    for(var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) | 0; }
+    return (h>>>0).toString(36);
+  }
+
+  function importBankExcel(file){
+    if(typeof XLSX === 'undefined'){ toast('No se pudo cargar el lector de Excel (¿sin internet?)'); return; }
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        var data = new Uint8Array(reader.result);
+        var wb = XLSX.read(data, { type:'array', cellDates:true });
+        var sheet = wb.Sheets[wb.SheetNames[0]];
+        var rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:null });
+
+        var headerIdx = -1;
+        for(var i=0;i<rows.length;i++){
+          var cell0 = rows[i] && rows[i][0];
+          if(typeof cell0 === 'string' && cell0.trim().toLowerCase() === 'fecha'){ headerIdx = i; break; }
+        }
+        if(headerIdx === -1) throw new Error('no header row found');
+
+        var existingIds = {};
+        state.transactions.forEach(function(t){ existingIds[t.id] = true; });
+
+        var added = 0, skipped = 0;
+        for(var r = headerIdx + 1; r < rows.length; r++){
+          var row = rows[r];
+          if(!row || !row.length) continue;
+          var date = parseBankDate(row[0]);
+          var desc = row[1] != null ? String(row[1]).trim() : '';
+          var cargo = parseCLPAmount(row[2]);
+          var abono = parseCLPAmount(row[3]);
+          if(!date || !desc || (cargo == null && abono == null)){ skipped++; continue; }
+          var amount = cargo != null ? -Math.abs(cargo) : Math.abs(abono);
+          var id = 'xls:' + date + ':' + simpleHash(desc + '|' + cargo + '|' + abono + '|' + r);
+          if(existingIds[id]) continue;
+          existingIds[id] = true;
+          state.transactions.push({
+            id: id, amount: amount, categoryId: guessCategory(desc) || 'otros',
+            description: desc, date: date, createdAt: Date.now().toString(36) + r.toString(36), source: 'bank_import'
+          });
+          added++;
+        }
+        saveState();
+        renderAll();
+        if(added > 0){
+          toast(added + ' movimiento' + (added === 1 ? '' : 's') + ' importado' + (added === 1 ? '' : 's')
+            + (skipped ? ' (' + skipped + ' fila' + (skipped === 1 ? '' : 's') + ' sin reconocer)' : ''));
+        } else {
+          toast('No había movimientos nuevos para importar');
+        }
+      }catch(e){
+        toast('No se pudo leer ese archivo. Revisa que tenga las columnas Fecha, Descripción, Cargo, Abono, Saldo.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   // ---------- wiring ----------
 
   document.querySelectorAll('[data-nav]').forEach(function(el){
@@ -879,6 +994,10 @@
   document.getElementById('btnExport').addEventListener('click', exportData);
   document.getElementById('importFile').addEventListener('change', function(e){
     if(e.target.files && e.target.files[0]) importData(e.target.files[0]);
+    e.target.value = '';
+  });
+  document.getElementById('importBankFile').addEventListener('change', function(e){
+    if(e.target.files && e.target.files[0]) importBankExcel(e.target.files[0]);
     e.target.value = '';
   });
   document.getElementById('btnReset').addEventListener('click', function(){
