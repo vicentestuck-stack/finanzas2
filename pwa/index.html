@@ -92,8 +92,8 @@
   .btn-primary:disabled{opacity:.45}
   .btn-ghost{background:var(--surface);color:var(--text);border:1px solid var(--border)}
   .btn-danger{background:rgba(251,113,133,.14);color:var(--red)}
-  .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;max-width:420px;width:calc(100% - 40px);z-index:20}
-  nav.bottom{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;background:transparent;z-index:30;padding:0 0 env(safe-area-inset-bottom) 0}
+  .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom));max-width:420px;width:calc(100% - 40px);z-index:40}
+  nav.bottom{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;background:transparent;z-index:30}
   .navbar{display:flex;width:100%;max-width:460px;background:var(--bg);border-top:1px solid var(--border);padding:8px 6px calc(10px + env(safe-area-inset-bottom)) 6px}
   .navbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;background:none;border:none;color:var(--text-faint)}
   .navbtn.active{color:var(--accent)}
