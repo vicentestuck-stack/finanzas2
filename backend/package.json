@@ -4,6 +4,7 @@
   "private": true,
   "description": "Finsy backend: holds the Fintoc secret key and talks to Supabase. Deployed as Vercel serverless functions, one file per route under api/.",
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4"
+    "@supabase/supabase-js": "^2.45.4",
+    "web-push": "^3.6.7"
   }
 }
