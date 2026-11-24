@@ -157,6 +157,9 @@
   .keypad-bottom{display:flex;align-items:center;gap:10px;padding:10px 16px calc(16px + env(safe-area-inset-bottom)) 16px}
   .keypad-bottom .btn-primary{flex:1}
   .toggle-row.type2 button{display:flex;align-items:center;justify-content:center;gap:6px}
+  .kp-cat-select-wrap{display:none;padding:0 16px 12px 16px}
+  .kp-cat-select-wrap select{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:11px 16px;color:var(--text);font-size:13.5px;outline:none;appearance:none}
+  .kp-cat-select-wrap select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent)}
 
   /* icon/color pickers */
   .icon-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
@@ -212,7 +215,8 @@
     .fab{display:none!important}
 
     .keypad-screen{left:50%;right:auto;width:100%;max-width:460px;transform:translateX(-50%);border-left:1px solid var(--border);border-right:1px solid var(--border)}
-    #kpCatRow{flex-wrap:wrap;overflow-x:visible}
+    #kpCatRow{display:none}
+    .kp-cat-select-wrap{display:block}
     .modal-overlay .modal{max-width:460px}
   }
 </style>
@@ -593,6 +597,9 @@
     <span class="small faint" style="align-self:center;margin-left:4px">Se repite desde hoy</span>
   </div>
   <div class="keypad-chiprow" id="kpCatRow"></div>
+  <div class="kp-cat-select-wrap">
+    <select id="kpCatSelect" aria-label="Categoría"></select>
+  </div>
   <div class="keypad-chiprow">
     <input id="kpDesc" type="text" placeholder="Nombre (opcional)" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:10px 16px;color:var(--text);font-size:13.5px;outline:none">
   </div>
@@ -1502,11 +1509,22 @@
       return '<button type="button" class="chip'+(i===0?' active':'')+'" data-kpcat="'+c.id+'">'+iconSvg(c.icon,'currentColor',13)+' '+esc(c.name)+'</button>';
     }).join('');
     row.querySelectorAll('[data-kpcat]').forEach(function(el){
-      el.addEventListener('click', function(){
-        row.querySelectorAll('[data-kpcat]').forEach(function(x){x.classList.remove('active');});
-        el.classList.add('active');
-      });
+      el.addEventListener('click', function(){ kpSetActiveCategory(el.dataset.kpcat); });
     });
+    var sel = document.getElementById('kpCatSelect');
+    if(sel){
+      sel.innerHTML = list.map(function(c){ return '<option value="'+c.id+'">'+esc(c.name)+'</option>'; }).join('');
+      if(list[0]) sel.value = list[0].id;
+    }
+  }
+  // Keeps the mobile chip row and the desktop dropdown in sync no matter
+  // which one the user (or voice/receipt-scan auto-fill) picked from.
+  function kpSetActiveCategory(categoryId){
+    var match = document.querySelector('#kpCatRow [data-kpcat="'+categoryId+'"]');
+    if(!match) return;
+    document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){ x.classList.toggle('active', x===match); });
+    var sel = document.getElementById('kpCatSelect');
+    if(sel) sel.value = categoryId;
   }
   function kpFillAccounts(){
     var sel = document.getElementById('kpAccount');
@@ -1543,11 +1561,7 @@
     addType = existing ? (existing.amount>=0?'income':'expense') : 'expense';
     document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){ b.classList.toggle('sel', b.dataset.type===addType); });
     kpFillCategories();
-    if(existing){
-      var btn = document.querySelector('#kpCatRow [data-kpcat="'+existing.categoryId+'"]');
-      document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){x.classList.remove('active');});
-      if(btn) btn.classList.add('active');
-    }
+    if(existing){ kpSetActiveCategory(existing.categoryId); }
     kpFillAccounts();
     document.getElementById('kpDesc').value = existing ? (existing.description||'') : '';
     document.getElementById('kpDate').value = existing ? existing.date : todayISO();
@@ -1584,8 +1598,7 @@
       addType = cat.kind==='income' ? 'income' : 'expense';
       document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){ b.classList.toggle('sel', b.dataset.type===addType); });
       kpFillCategories();
-      var btn = document.querySelector('#kpCatRow [data-kpcat="'+cat.id+'"]');
-      if(btn){ document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){x.classList.remove('active');}); btn.classList.add('active'); }
+      kpSetActiveCategory(cat.id);
     }
   }
   function saveKeypad(){
@@ -2331,9 +2344,7 @@
         }
         if(data.merchant && !document.getElementById('kpDesc').value){
           document.getElementById('kpDesc').value = data.merchant;
-          var catId = guessCategory(data.merchant);
-          var catBtn = document.querySelector('#kpCatRow [data-kpcat="'+catId+'"]');
-          if(catBtn){ document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){x.classList.remove('active');}); catBtn.classList.add('active'); }
+          kpSetActiveCategory(guessCategory(data.merchant));
         }
         if(data.date){ document.getElementById('kpDate').value = data.date; }
         if(!data.amount && !data.merchant){
@@ -2508,6 +2519,7 @@
   document.getElementById('btnKeypadClose').addEventListener('click', closeKeypad);
   document.getElementById('btnKpSave').addEventListener('click', saveKeypad);
   document.getElementById('btnKpDelete').addEventListener('click', deleteKeypad);
+  document.getElementById('kpCatSelect').addEventListener('change', function(){ kpSetActiveCategory(this.value); });
   document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){
     b.addEventListener('click', function(){
       addType = b.dataset.type;
@@ -2533,9 +2545,7 @@
       var amt = parseAmount(text);
       if(amt){ kpAmountStr = String(amt); document.getElementById('kpAmount').textContent = kpAmountStr; }
       if(!document.getElementById('kpDesc').value) document.getElementById('kpDesc').value = text;
-      var catId = guessCategory(text);
-      var catBtn = document.querySelector('#kpCatRow [data-kpcat="'+catId+'"]');
-      if(catBtn){ document.querySelectorAll('#kpCatRow [data-kpcat]').forEach(function(x){x.classList.remove('active');}); catBtn.classList.add('active'); }
+      kpSetActiveCategory(guessCategory(text));
     });
   });
   document.getElementById('btnKpReceipt').addEventListener('click', function(){
