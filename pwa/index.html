@@ -325,10 +325,16 @@
     <section class="view" data-view="summary">
       <div class="card" id="healthCard"></div>
       <div class="ring-wrap">
-        <span class="cap">Este mes</span>
+        <button type="button" class="cap" id="summaryRingLabel" style="background:none;border:none;padding:0;font:inherit;cursor:default">Este mes</button>
         <div class="ring-center" id="summaryRing"></div>
       </div>
       <div class="chipscroll" id="summaryFilterRow"></div>
+      <div>
+        <div class="section-title"><h2>Por mes</h2></div>
+        <div class="card" style="padding-top:16px;margin-top:10px">
+          <svg class="barchart" id="summaryMonthChart" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </div>
+      </div>
       <div>
         <div class="section-title"><h2>Por categoría</h2></div>
         <div class="list" id="summaryCategories" style="margin-top:10px"></div>
@@ -975,6 +981,7 @@
   var actFilter = null;
   var summaryFilter = null;
   var summaryExpandedCategory = null; // category id currently expanded in "Por categoría", or null
+  var summaryMonth = monthKey(); // month shown in Resumen; changes when the user taps a bar in "Por mes"
   var addType = 'expense';
   var budgetEditingCategoryId = null;
   var catMgmtKind = 'expense';
@@ -1334,11 +1341,42 @@
       el.addEventListener('click', function(){ summaryFilter = el.dataset.sf || null; renderSummary(); });
     });
 
-    var mk = monthKey();
+    var mk = summaryMonth;
+    var isCurrentMonth = mk === monthKey();
+    var ringLabelEl = document.getElementById('summaryRingLabel');
+    ringLabelEl.textContent = isCurrentMonth ? 'Este mes' : monthFullLabel(mk)+' · toca para volver a hoy';
+    ringLabelEl.style.cursor = isCurrentMonth ? 'default' : 'pointer';
+    ringLabelEl.style.color = isCurrentMonth ? '' : 'var(--accent)';
+    ringLabelEl.onclick = isCurrentMonth ? null : function(){ summaryMonth = monthKey(); renderSummary(); };
+
     var t = monthTotals(mk, summaryFilter);
     var ringPct = t.income>0 ? Math.min(100, Math.round(t.expense/t.income*100)) : (t.expense>0?100:0);
     document.getElementById('summaryRing').innerHTML = ringSvg(ringPct, 'var(--accent)', 200)
-      +'<div class="mid"><span class="amount">'+fmtMaybeHidden(t.expense)+'</span><span class="sub">gastado este mes</span></div>';
+      +'<div class="mid"><span class="amount">'+fmtMaybeHidden(t.expense)+'</span><span class="sub">'+(isCurrentMonth?'gastado este mes':'gastado ese mes')+'</span></div>';
+
+    var monthKeys = lastNMonthKeys(6);
+    var monthData = monthKeys.map(function(k){ return { mk:k, expense: monthTotals(k, summaryFilter).expense }; });
+    var monthMax = Math.max.apply(null, monthData.map(function(d){return d.expense;})) || 1;
+    var mw = 320, mh = 110, mpad = 22;
+    var mGroupW = mw/monthData.length;
+    var mBarW = Math.max(6, mGroupW - 14);
+    var monthBars = monthData.map(function(d,i){
+      var selected = d.mk === mk;
+      var isToday = d.mk === monthKey();
+      var bh = Math.max(3, (d.expense/monthMax)*(mh-mpad));
+      var gx = i*mGroupW + (mGroupW-mBarW)/2;
+      var color = selected ? 'var(--accent)' : 'rgba(255,255,255,.12)';
+      return '<g data-mk="'+d.mk+'" style="cursor:pointer">'
+        +'<rect x="'+gx.toFixed(1)+'" y="'+(mh-mpad-bh).toFixed(1)+'" width="'+mBarW.toFixed(1)+'" height="'+(bh+mpad).toFixed(1)+'" fill="transparent"/>'
+        +'<rect x="'+gx.toFixed(1)+'" y="'+(mh-mpad-bh).toFixed(1)+'" width="'+mBarW.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="3" fill="'+color+'"/>'
+        +'<text x="'+(gx+mBarW/2).toFixed(1)+'" y="'+(mh-6)+'" font-size="10" fill="'+(isToday?'var(--accent)':'rgba(255,255,255,.4)')+'" font-weight="'+(isToday?'700':'400')+'" text-anchor="middle">'+monthLabel(d.mk)+'</text>'
+        +'</g>';
+    }).join('');
+    var monthSvg = document.getElementById('summaryMonthChart');
+    monthSvg.innerHTML = monthBars;
+    monthSvg.querySelectorAll('[data-mk]').forEach(function(g){
+      g.addEventListener('click', function(){ summaryMonth = g.dataset.mk; renderSummary(); });
+    });
 
     var cats = state.categories.filter(function(c){return c.kind!=='income';});
     var withSpend = cats.map(function(c){ return { c:c, spend: categorySpend(c.id, mk) }; }).filter(function(x){return x.spend>0;});
@@ -1351,12 +1389,15 @@
       box.innerHTML = withSpend.map(function(x){
         var pct = Math.round(x.spend/totalSpend*100);
         var expanded = summaryExpandedCategory === x.c.id;
-        var rowHtml = '<button type="button" class="tx-row" data-catrow="'+x.c.id+'">'
+        var rowHtml = '<button type="button" class="tx-row" data-catrow="'+x.c.id+'" style="flex-direction:column;align-items:stretch;gap:10px">'
+          +'<div class="row" style="width:100%">'
           +'<div class="icon-circle" style="border-color:'+esc(x.c.color)+';background:color-mix(in srgb, '+esc(x.c.color)+' 16%, transparent)">'+iconSvg(x.c.icon,x.c.color)+'</div>'
           +'<span class="tx-meta"><span class="name">'+esc(x.c.name)+'</span></span>'
           +'<span class="xsmall faint" style="margin-right:4px">'+(expanded?'▾':'▸')+'</span>'
           +'<span class="small faint" style="margin-right:8px">'+pct+'%</span>'
           +'<b style="font-size:14px">'+fmtMaybeHidden(x.spend)+'</b>'
+          +'</div>'
+          +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background-color:'+esc(x.c.color)+'"></div></div>'
           +'</button>';
         if(!expanded) return rowHtml;
         var txs = state.transactions.filter(function(t){
@@ -1413,6 +1454,12 @@
     var parts = mk.split('-');
     var d = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, 1);
     return d.toLocaleDateString('es-CL',{month:'short'}).replace('.','');
+  }
+  function monthFullLabel(mk){
+    var parts = mk.split('-');
+    var d = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, 1);
+    var s = d.toLocaleDateString('es-CL',{month:'long', year:'numeric'});
+    return s.charAt(0).toUpperCase()+s.slice(1);
   }
   function lastNMonthKeys(n){
     var out = [];
