@@ -2227,6 +2227,7 @@
     entretenimiento:['cine','juego','entretenimiento'],
     ingresos:['sueldo','pago','ingreso','depósito','deposito']
   };
+  var CATEGORY_NAME_STOPWORDS = {y:1, de:1, la:1, el:1, los:1, las:1, del:1, en:1};
   // Returns a matching category id, or null when nothing in the text matches.
   function matchCategory(text){
     var lower = text.toLowerCase();
@@ -2234,7 +2235,11 @@
       if(CATEGORY_SYNONYMS[id].some(function(w){ return hasWord(lower, w); })) return id;
     }
     for(var i=0;i<state.categories.length;i++){
-      if(lower.indexOf(state.categories[i].name.toLowerCase())>-1) return state.categories[i].id;
+      var catName = state.categories[i].name.toLowerCase();
+      if(lower.indexOf(catName)>-1) return state.categories[i].id;
+      // A custom category like "Anto y Yur" should also match just "anto" or "yur" alone.
+      var nameWords = catName.split(/\s+/).filter(function(w){ return w.length>2 && !CATEGORY_NAME_STOPWORDS[w]; });
+      if(nameWords.some(function(w){ return hasWord(lower, w); })) return state.categories[i].id;
     }
     return null;
   }
