@@ -765,15 +765,6 @@
 (function(){
   "use strict";
 
-  // Temporary diagnostic: surface any uncaught error visibly, since we can't
-  // see the real device's console. Safe to remove once sync is confirmed.
-  window.addEventListener('error', function(e){
-    alert('DEBUG JS ERROR: ' + e.message + ' @ ' + (e.filename||'') + ':' + e.lineno);
-  });
-  window.addEventListener('unhandledrejection', function(e){
-    alert('DEBUG PROMISE ERROR: ' + (e.reason && e.reason.message ? e.reason.message : JSON.stringify(e.reason)));
-  });
-
   var STORAGE_KEY = 'finsy:v1';
 
   // ---------- cloud config ----------
@@ -2710,20 +2701,13 @@
   }
   function pushStateNow(){
     var c = getCloudClient();
-    if(!c){ alert('DEBUG: pushStateNow — no cloud client'); return; }
-    if(!cloudSession){ alert('DEBUG: pushStateNow — no cloudSession'); return; }
-    alert('DEBUG: pushStateNow sending for user ' + cloudSession.user.id);
+    if(!c || !cloudSession) return;
     c.from('user_state').upsert({
       user_id: cloudSession.user.id,
       state: state,
       device_id: SYNC_DEVICE_ID,
       updated_at: new Date().toISOString()
-    }).then(function(res){
-      if(res && res.error) alert('DEBUG: push error — ' + JSON.stringify(res.error));
-      else alert('DEBUG: push ok');
-    }).catch(function(err){
-      alert('DEBUG: push threw — ' + (err && err.message ? err.message : JSON.stringify(err)));
-    });
+    }).then(function(){}).catch(function(){});
   }
   function applyRemoteState(remoteState){
     applyingRemoteState = true;
