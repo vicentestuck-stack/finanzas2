@@ -984,6 +984,7 @@
   var acctPickedColor = PALETTE[0];
   var kpAmountStr = '0';
   var kpRecurring = null; // null | 'monthly' | 'weekly'
+  var kpCategoryManual = false; // true once the user picks a category by hand, so typing the description stops auto-guessing it
   var pendingQuickCategory = (new URLSearchParams(location.search)).get('rapido') || null;
   var debtEditingId = null;
   var debtPickedColor = PALETTE[0];
@@ -1509,7 +1510,7 @@
       return '<button type="button" class="chip'+(i===0?' active':'')+'" data-kpcat="'+c.id+'">'+iconSvg(c.icon,'currentColor',13)+' '+esc(c.name)+'</button>';
     }).join('');
     row.querySelectorAll('[data-kpcat]').forEach(function(el){
-      el.addEventListener('click', function(){ kpSetActiveCategory(el.dataset.kpcat); });
+      el.addEventListener('click', function(){ kpCategoryManual = true; kpSetActiveCategory(el.dataset.kpcat); });
     });
     var sel = document.getElementById('kpCatSelect');
     if(sel){
@@ -1560,6 +1561,7 @@
     document.getElementById('kpAmount').textContent = kpAmountStr;
     addType = existing ? (existing.amount>=0?'income':'expense') : 'expense';
     document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){ b.classList.toggle('sel', b.dataset.type===addType); });
+    kpCategoryManual = !!existing; // editing keeps its saved category; a new transaction can auto-guess from the description
     kpFillCategories();
     if(existing){ kpSetActiveCategory(existing.categoryId); }
     kpFillAccounts();
@@ -2214,26 +2216,30 @@
     }
     return false;
   }
-  function guessCategory(text){
+  var CATEGORY_SYNONYMS = {
+    vivienda:['arriendo','vivienda','gastos comunes','luz','agua','gas','enel','cge','metrogas','aguas andinas','essbio','essal'],
+    supermercado:['super','jumbo','lider','tottus','supermercado','unimarc'],
+    transporte:['uber','taxi','metro','bencina','transporte','bus','didi','cabify'],
+    delivery:['delivery','rappi','pedidosya','uber eats'],
+    suscripciones:['netflix','spotify','suscripcion','suscripción','hbo','disney'],
+    salud:['farmacia','doctor','salud','clinica','clínica'],
+    cafe:['café','cafe','starbucks','coffee'],
+    entretenimiento:['cine','juego','entretenimiento'],
+    ingresos:['sueldo','pago','ingreso','depósito','deposito']
+  };
+  // Returns a matching category id, or null when nothing in the text matches.
+  function matchCategory(text){
     var lower = text.toLowerCase();
-    var synonyms = {
-      vivienda:['arriendo','vivienda','gastos comunes','luz','agua','gas','enel','cge','metrogas','aguas andinas','essbio','essal'],
-      supermercado:['super','jumbo','lider','tottus','supermercado','unimarc'],
-      transporte:['uber','taxi','metro','bencina','transporte','bus','didi','cabify'],
-      delivery:['delivery','rappi','pedidosya','uber eats'],
-      suscripciones:['netflix','spotify','suscripcion','suscripción','hbo','disney'],
-      salud:['farmacia','doctor','salud','clinica','clínica'],
-      cafe:['café','cafe','starbucks','coffee'],
-      entretenimiento:['cine','juego','entretenimiento'],
-      ingresos:['sueldo','pago','ingreso','depósito','deposito']
-    };
-    for(var id in synonyms){
-      if(synonyms[id].some(function(w){ return hasWord(lower, w); })) return id;
+    for(var id in CATEGORY_SYNONYMS){
+      if(CATEGORY_SYNONYMS[id].some(function(w){ return hasWord(lower, w); })) return id;
     }
     for(var i=0;i<state.categories.length;i++){
       if(lower.indexOf(state.categories[i].name.toLowerCase())>-1) return state.categories[i].id;
     }
-    return 'otros';
+    return null;
+  }
+  function guessCategory(text){
+    return matchCategory(text) || 'otros';
   }
   function assistantReply(text){
     var lower = text.toLowerCase().trim();
@@ -2519,7 +2525,12 @@
   document.getElementById('btnKeypadClose').addEventListener('click', closeKeypad);
   document.getElementById('btnKpSave').addEventListener('click', saveKeypad);
   document.getElementById('btnKpDelete').addEventListener('click', deleteKeypad);
-  document.getElementById('kpCatSelect').addEventListener('change', function(){ kpSetActiveCategory(this.value); });
+  document.getElementById('kpCatSelect').addEventListener('change', function(){ kpCategoryManual = true; kpSetActiveCategory(this.value); });
+  document.getElementById('kpDesc').addEventListener('input', function(){
+    if(kpCategoryManual) return;
+    var guess = matchCategory(this.value);
+    if(guess) kpSetActiveCategory(guess);
+  });
   document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){
     b.addEventListener('click', function(){
       addType = b.dataset.type;
