@@ -974,6 +974,7 @@
   var currentView = 'activity';
   var actFilter = null;
   var summaryFilter = null;
+  var summaryExpandedCategory = null; // category id currently expanded in "Por categoría", or null
   var addType = 'expense';
   var budgetEditingCategoryId = null;
   var catMgmtKind = 'expense';
@@ -1349,13 +1350,28 @@
     } else {
       box.innerHTML = withSpend.map(function(x){
         var pct = Math.round(x.spend/totalSpend*100);
-        return '<div class="tx-row" style="cursor:default">'
+        var expanded = summaryExpandedCategory === x.c.id;
+        var rowHtml = '<button type="button" class="tx-row" data-catrow="'+x.c.id+'">'
           +'<div class="icon-circle" style="border-color:'+esc(x.c.color)+';background:color-mix(in srgb, '+esc(x.c.color)+' 16%, transparent)">'+iconSvg(x.c.icon,x.c.color)+'</div>'
           +'<span class="tx-meta"><span class="name">'+esc(x.c.name)+'</span></span>'
+          +'<span class="xsmall faint" style="margin-right:4px">'+(expanded?'▾':'▸')+'</span>'
           +'<span class="small faint" style="margin-right:8px">'+pct+'%</span>'
           +'<b style="font-size:14px">'+fmtMaybeHidden(x.spend)+'</b>'
-          +'</div>';
+          +'</button>';
+        if(!expanded) return rowHtml;
+        var txs = state.transactions.filter(function(t){
+          return !t.isTransfer && t.categoryId===x.c.id && t.amount<0 && monthKey(t.date)===mk;
+        }).sort(function(a,b){ return b.date.localeCompare(a.date); });
+        var subHtml = '<div class="list" style="margin:2px 0 4px 16px">'+txs.map(txRowHtml).join('')+'</div>';
+        return rowHtml + subHtml;
       }).join('');
+      box.querySelectorAll('[data-catrow]').forEach(function(el){
+        el.addEventListener('click', function(){
+          summaryExpandedCategory = (summaryExpandedCategory===el.dataset.catrow) ? null : el.dataset.catrow;
+          renderSummary();
+        });
+      });
+      bindTxRowClicks(box);
     }
   }
 
