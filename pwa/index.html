@@ -841,25 +841,27 @@
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
       if(!raw) return seedState();
-      var s = JSON.parse(raw);
-      if(!s.categories || !s.categories.length) s.categories = DEFAULT_CATEGORIES.slice();
-      s.categories.forEach(function(c){ if(!c.kind) c.kind = c.id==='ingresos' ? 'income' : 'expense'; });
-      if(!s.categories.some(function(c){return c.id==='deudas';})) s.categories.push({ id:'deudas', name:'Deudas', icon:'wallet', color:'#60A5FA', kind:'expense' });
-      if(!s.accounts || !s.accounts.length) s.accounts = DEFAULT_ACCOUNTS.slice();
-      s.transactions = s.transactions || [];
-      s.transactions.forEach(function(t){ if(!t.accountId) t.accountId = s.accounts[0].id; });
-      s.budgets = s.budgets || [];
-      s.recurring = s.recurring || [];
-      s.chat = s.chat || [];
-      s.debts = s.debts || [];
-      s.goals = s.goals || [];
-      s.investments = s.investments || [];
-      s.shared = s.shared || [];
-      s.dismissedSubscriptions = s.dismissedSubscriptions || [];
-      s.confirmedSubscriptions = s.confirmedSubscriptions || [];
-      s.settings = Object.assign({}, DEFAULT_SETTINGS, s.settings || {});
-      return s;
+      return normalizeState(JSON.parse(raw));
     }catch(e){ return seedState(); }
+  }
+  function normalizeState(s){
+    if(!s.categories || !s.categories.length) s.categories = DEFAULT_CATEGORIES.slice();
+    s.categories.forEach(function(c){ if(!c.kind) c.kind = c.id==='ingresos' ? 'income' : 'expense'; });
+    if(!s.categories.some(function(c){return c.id==='deudas';})) s.categories.push({ id:'deudas', name:'Deudas', icon:'wallet', color:'#60A5FA', kind:'expense' });
+    if(!s.accounts || !s.accounts.length) s.accounts = DEFAULT_ACCOUNTS.slice();
+    s.transactions = s.transactions || [];
+    s.transactions.forEach(function(t){ if(!t.accountId) t.accountId = s.accounts[0].id; });
+    s.budgets = s.budgets || [];
+    s.recurring = s.recurring || [];
+    s.chat = s.chat || [];
+    s.debts = s.debts || [];
+    s.goals = s.goals || [];
+    s.investments = s.investments || [];
+    s.shared = s.shared || [];
+    s.dismissedSubscriptions = s.dismissedSubscriptions || [];
+    s.confirmedSubscriptions = s.confirmedSubscriptions || [];
+    s.settings = Object.assign({}, DEFAULT_SETTINGS, s.settings || {});
+    return s;
   }
   function seedState(){
     return {
@@ -870,7 +872,18 @@
       settings: Object.assign({}, DEFAULT_SETTINGS)
     };
   }
-  function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  var SYNC_DEVICE_ID = (function(){
+    var k = 'finsy:deviceId';
+    var id = localStorage.getItem(k);
+    if(!id){ id = uid()+uid(); localStorage.setItem(k, id); }
+    return id;
+  })();
+  var applyingRemoteState = false;
+  function saveState(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if(!applyingRemoteState) localStorage.setItem('finsy:localUpdatedAt', Date.now().toString());
+    scheduleCloudPush();
+  }
 
   var state = loadState();
   var currentView = 'activity';
@@ -2675,12 +2688,81 @@
     var when = (cloudStatusInfo && cloudStatusInfo.last_synced_at) ? new Date(cloudStatusInfo.last_synced_at).toLocaleString('es-CL') : 'nunca';
     document.getElementById('cloudStatusText').textContent = inst + ' — última sincronización: ' + when + (navigator.onLine ? '' : ' (sin conexión ahora)');
   }
+  // ---------- real-time full-state sync across devices ----------
+
+  var syncPushTimer = null;
+  var realtimeChannel = null;
+
+  function scheduleCloudPush(){
+    if(applyingRemoteState) return;
+    if(!cloudSession) return;
+    clearTimeout(syncPushTimer);
+    syncPushTimer = setTimeout(pushStateNow, 1200);
+  }
+  function pushStateNow(){
+    var c = getCloudClient();
+    if(!c || !cloudSession) return;
+    c.from('user_state').upsert({
+      user_id: cloudSession.user.id,
+      state: state,
+      device_id: SYNC_DEVICE_ID,
+      updated_at: new Date().toISOString()
+    }).then(function(){}).catch(function(){});
+  }
+  function applyRemoteState(remoteState){
+    applyingRemoteState = true;
+    state = normalizeState(remoteState);
+    saveState();
+    applyingRemoteState = false;
+    renderAll();
+    reflectSettingsUI();
+  }
+  function startRealtimeSync(){
+    var c = getCloudClient();
+    if(!c || !cloudSession) return;
+    stopRealtimeSync();
+    realtimeChannel = c.channel('user_state_'+cloudSession.user.id)
+      .on('postgres_changes', { event:'*', schema:'public', table:'user_state', filter:'user_id=eq.'+cloudSession.user.id }, function(payload){
+        var row = payload.new;
+        if(!row || row.device_id===SYNC_DEVICE_ID) return;
+        applyRemoteState(row.state);
+        toast('Sincronizado desde otro dispositivo');
+      })
+      .subscribe();
+  }
+  function stopRealtimeSync(){
+    if(realtimeChannel){
+      var c = getCloudClient();
+      if(c) c.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+  }
+  function initialCloudStateSync(){
+    var c = getCloudClient();
+    if(!c || !cloudSession) return;
+    c.from('user_state').select('state, updated_at, device_id').eq('user_id', cloudSession.user.id).maybeSingle().then(function(res){
+      if(res.error || !res.data){ pushStateNow(); return; }
+      if(res.data.device_id === SYNC_DEVICE_ID) return;
+      var remoteTime = new Date(res.data.updated_at).getTime();
+      var localTime = parseInt(localStorage.getItem('finsy:localUpdatedAt')||'0', 10);
+      if(remoteTime > localTime){
+        applyRemoteState(res.data.state);
+        toast('Datos sincronizados');
+      } else {
+        pushStateNow();
+      }
+    }).catch(function(){});
+  }
+
   function onCloudSessionChange(session){
     cloudSession = session;
     if(session){
       hideGate();
       cloudRefreshBankStatus().then(function(){ renderCloudSettings(); if(navigator.onLine) cloudSync(); });
+      initialCloudStateSync();
+      startRealtimeSync();
     } else {
+      stopRealtimeSync();
       cloudBankConnected = false; cloudStatusInfo = null;
       renderCloudSettings();
       showGate();
@@ -2696,7 +2778,7 @@
       if(!cloudSession) showGate();
     });
   }
-  window.addEventListener('online', function(){ if(cloudSession) cloudSync(); renderCloudSettings(); if(!cloudSession) showGate(); });
+  window.addEventListener('online', function(){ if(cloudSession){ cloudSync(); scheduleCloudPush(); } renderCloudSettings(); if(!cloudSession) showGate(); });
   window.addEventListener('offline', function(){ renderCloudSettings(); if(!cloudSession) showGate(); });
 
   document.getElementById('btnGateSignup').addEventListener('click', function(){ cloudSignUp('gateEmail','gatePassword','gateAuthMsg'); });
