@@ -375,6 +375,7 @@
         <span class="small muted">Ingresos restantes</span>
         <span class="amount" id="anaNet" style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px">$0</span>
       </div>
+      <div class="card" id="antSpendingCard" style="display:flex;flex-direction:column;gap:4px"></div>
       <div>
         <div class="section-title"><h2>Por categoría (histórico)</h2></div>
         <div class="list" id="anaCategories" style="margin-top:10px"></div>
@@ -502,6 +503,10 @@
         <div class="settings-row" style="border-bottom:1px solid var(--border)">
           <span class="lbl">Ocultar saldos</span>
           <label class="switch"><input type="checkbox" id="toggleHideBalances"><span class="track"></span><span class="knob"></span></label>
+        </div>
+        <div class="settings-row" style="border-bottom:1px solid var(--border)">
+          <span class="lbl">Arrastrar presupuesto no usado al mes siguiente</span>
+          <label class="switch"><input type="checkbox" id="toggleBudgetRollover"><span class="track"></span><span class="knob"></span></label>
         </div>
         <div class="settings-row">
           <span class="lbl">Respuesta háptica</span>
@@ -755,6 +760,10 @@
       <input id="fDebtApr" type="number" inputmode="decimal" placeholder="0">
     </div>
     <div class="field">
+      <label for="fDebtMinPayment">Pago mensual planeado (CLP, opcional)</label>
+      <input id="fDebtMinPayment" type="number" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="field">
       <label>Color</label>
       <div class="color-grid" id="debtColorGrid"></div>
     </div>
@@ -796,6 +805,10 @@
     <div class="field">
       <label for="fGoalTarget">Monto objetivo (CLP)</label>
       <input id="fGoalTarget" type="number" inputmode="numeric" placeholder="500000">
+    </div>
+    <div class="field">
+      <label for="fGoalDueDate">¿Para cuándo lo necesitas? (opcional)</label>
+      <input id="fGoalDueDate" type="date">
     </div>
     <div class="field" id="goalContributeField">
       <label for="fGoalContribute">Aportar o retirar (CLP, +/-)</label>
@@ -912,7 +925,7 @@
   var DEFAULT_ACCOUNTS = [
     { id:'principal', name:'Cuenta principal', color:'#F2B705', startBalance:0 }
   ];
-  var DEFAULT_SETTINGS = { decimals:false, hideBalances:false, haptics:true, weekStart:1, monthStart:1 };
+  var DEFAULT_SETTINGS = { decimals:false, hideBalances:false, haptics:true, weekStart:1, monthStart:1, budgetRollover:false };
 
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
   function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -956,6 +969,7 @@
     s.shared = s.shared || [];
     s.dismissedSubscriptions = s.dismissedSubscriptions || [];
     s.confirmedSubscriptions = s.confirmedSubscriptions || [];
+    s.merchantMemory = s.merchantMemory || {};
     s.settings = Object.assign({}, DEFAULT_SETTINGS, s.settings || {});
     return s;
   }
@@ -964,7 +978,7 @@
       categories: DEFAULT_CATEGORIES.slice(), accounts: DEFAULT_ACCOUNTS.slice(),
       transactions: [], budgets: [], recurring: [], chat: [],
       debts: [], goals: [], investments: [], shared: [],
-      dismissedSubscriptions: [], confirmedSubscriptions: [],
+      dismissedSubscriptions: [], confirmedSubscriptions: [], merchantMemory: {},
       settings: Object.assign({}, DEFAULT_SETTINGS)
     };
   }
@@ -1034,9 +1048,39 @@
     });
     return sum;
   }
+  function priorMonthKeys(mk, n){
+    var parts = mk.split('-');
+    var base = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, 1);
+    var out = [];
+    for(var i=n;i>=1;i--){
+      var d = new Date(base.getFullYear(), base.getMonth()-i, 1);
+      out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+    }
+    return out;
+  }
+  function categoryAverageSpend(categoryId, mk, n){
+    var months = priorMonthKeys(mk, n);
+    var total = months.reduce(function(a,k){ return a + categorySpend(categoryId, k); }, 0);
+    return total / months.length;
+  }
   function budgetFor(categoryId, mk){
     mk = mk || monthKey();
     return state.budgets.find(function(b){return b.categoryId===categoryId && b.month===mk;});
+  }
+  // The cap actually in effect this month: its own cap, plus what was left over (or
+  // overspent) from last month's cap, when the user turned rollover on in Ajustes.
+  // Only looks one month back, so the carry never compounds across more than one gap.
+  function effectiveBudgetCap(categoryId, mk){
+    mk = mk || monthKey();
+    var b = budgetFor(categoryId, mk);
+    if(!b) return 0;
+    var cap = b.cap;
+    if(state.settings.budgetRollover){
+      var prevMk = shiftMonthKey(mk, -1);
+      var prevB = budgetFor(categoryId, prevMk);
+      if(prevB) cap += prevB.cap - categorySpend(categoryId, prevMk);
+    }
+    return Math.max(0, cap);
   }
   function accountBalance(accountId){
     var a = acctById(accountId);
@@ -1048,6 +1092,26 @@
     return state.accounts.reduce(function(a,acc){ return a + accountBalance(acc.id); }, 0);
   }
   function debtTotal(){ return state.debts.reduce(function(a,d){ return a + (d.balance||0); }, 0); }
+  // Standard loan amortization: how many months at d.minPayment to clear d.balance at d.apr.
+  // Returns null when there's nothing to project (no balance, no payment set, or the payment never covers the interest).
+  function debtPayoffProjection(d){
+    if(!d.balance || !d.minPayment) return null;
+    var monthlyRate = (d.apr||0)/100/12;
+    if(monthlyRate<=0){
+      var months = Math.ceil(d.balance/d.minPayment);
+      return { months:months, totalInterest:0, neverPaysOff:false };
+    }
+    var interestOnly = d.balance*monthlyRate;
+    if(d.minPayment<=interestOnly) return { months:null, totalInterest:null, neverPaysOff:true };
+    var months2 = Math.ceil(-Math.log(1-(d.balance*monthlyRate)/d.minPayment)/Math.log(1+monthlyRate));
+    var totalPaid = months2*d.minPayment;
+    return { months:months2, totalInterest:Math.max(0,Math.round(totalPaid-d.balance)), neverPaysOff:false };
+  }
+  function payoffDateLabel(months){
+    var d = new Date();
+    d.setMonth(d.getMonth()+months);
+    return d.toLocaleDateString('es-CL',{month:'long', year:'numeric'});
+  }
   function investmentTotal(){ return state.investments.reduce(function(a,i){ return a + (i.value||0); }, 0); }
   function netWorth(){ return totalAccountsBalance() + investmentTotal() - debtTotal(); }
   function debtById(id){ return state.debts.find(function(d){return d.id===id;}); }
@@ -1084,7 +1148,7 @@
 
     var cats = state.categories.filter(function(c){ return c.kind!=='income'; });
     var withBudget = cats.filter(function(c){ return budgetFor(c.id, mk); });
-    var withinCount = withBudget.filter(function(c){ var b = budgetFor(c.id, mk); return categorySpend(c.id, mk) <= b.cap; }).length;
+    var withinCount = withBudget.filter(function(c){ return categorySpend(c.id, mk) <= effectiveBudgetCap(c.id, mk); }).length;
     var budgetScore = withBudget.length ? (withinCount / withBudget.length * 100) : 65;
 
     var debtScore = 100;
@@ -1405,6 +1469,10 @@
       box.innerHTML = withSpend.map(function(x){
         var pct = Math.round(x.spend/totalSpend*100);
         var expanded = summaryExpandedCategory === x.c.id;
+        var avg = categoryAverageSpend(x.c.id, mk, 3);
+        var anomalyPct = avg>0 ? Math.round((x.spend-avg)/avg*100) : null;
+        var anomalyHtml = (anomalyPct!==null && anomalyPct>=30)
+          ? '<div class="xsmall" style="color:var(--orange)">+'+anomalyPct+'% vs. tu promedio de los últimos 3 meses</div>' : '';
         var rowHtml = '<button type="button" class="tx-row" data-catrow="'+x.c.id+'" style="flex-direction:column;align-items:stretch;gap:10px">'
           +'<div class="row" style="width:100%">'
           +'<div class="icon-circle" style="border-color:'+esc(x.c.color)+';background:color-mix(in srgb, '+esc(x.c.color)+' 16%, transparent)">'+iconSvg(x.c.icon,x.c.color)+'</div>'
@@ -1414,6 +1482,7 @@
           +'<b style="font-size:14px">'+fmtMaybeHidden(x.spend)+'</b>'
           +'</div>'
           +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background-color:'+esc(x.c.color)+'"></div></div>'
+          +anomalyHtml
           +'</button>';
         if(!expanded) return rowHtml;
         var txs = state.transactions.filter(function(t){
@@ -1437,7 +1506,7 @@
     var mk = monthKey();
     var cats = state.categories.filter(function(c){return c.kind!=='income';});
     var withBudget = cats.filter(function(c){ return budgetFor(c.id, mk); });
-    var capTotal = withBudget.reduce(function(a,c){ return a + budgetFor(c.id, mk).cap; }, 0);
+    var capTotal = withBudget.reduce(function(a,c){ return a + effectiveBudgetCap(c.id, mk); }, 0);
     var spendTotal = withBudget.reduce(function(a,c){ return a + categorySpend(c.id, mk); }, 0);
     var remaining = capTotal - spendTotal;
     var pct = capTotal>0 ? Math.min(100, Math.round(spendTotal/capTotal*100)) : 0;
@@ -1448,9 +1517,14 @@
     el.innerHTML = cats.map(function(c){
       var b = budgetFor(c.id, mk);
       var spend = categorySpend(c.id, mk);
-      var cap = b ? b.cap : 0;
+      var cap = b ? effectiveBudgetCap(c.id, mk) : 0;
       var cpct = cap>0 ? Math.min(100, Math.round(spend/cap*100)) : 0;
       var barClass = cpct>=100 ? 'over' : (cpct>=80 ? 'warn' : '');
+      var rolloverHtml = '';
+      if(b && state.settings.budgetRollover && cap!==b.cap){
+        var delta = cap-b.cap;
+        rolloverHtml = '<span class="xsmall faint">'+(delta>=0?'+':'')+fmtMaybeHidden(delta)+' arrastrado del mes pasado</span>';
+      }
       return '<button type="button" class="card" data-budget-cat="'+c.id+'" style="display:flex;flex-direction:column;gap:10px;text-align:left;color:inherit;width:100%">'
         +'<div class="row">'
           +'<div class="icon-circle" style="border-color:'+esc(c.color)+';background:color-mix(in srgb, '+esc(c.color)+' 16%, transparent)">'+iconSvg(c.icon,c.color)+'</div>'
@@ -1458,6 +1532,7 @@
           +'<span class="small muted">'+(cap>0 ? fmtMaybeHidden(spend)+' / '+fmt(cap) : 'Sin tope')+'</span>'
         +'</div>'
         +(cap>0 ? '<div class="bar-track"><div class="bar-fill '+barClass+'" style="width:'+cpct+'%;background-color:'+(barClass?'':esc(c.color))+'"></div></div>' : '<span class="xsmall faint">Toca para fijar un presupuesto mensual</span>')
+        +rolloverHtml
       +'</button>';
     }).join('');
     el.querySelectorAll('[data-budget-cat]').forEach(function(btn){
@@ -1491,6 +1566,15 @@
     }
     return out;
   }
+  var ANT_SPENDING_THRESHOLD = 8000; // CLP; small, easy-to-ignore purchases below this count as "gasto hormiga"
+  function antSpendingSummary(mk){
+    mk = mk || monthKey();
+    var matches = state.transactions.filter(function(t){
+      return !t.isTransfer && t.amount<0 && Math.abs(t.amount)<=ANT_SPENDING_THRESHOLD && monthKey(t.date)===mk;
+    });
+    var total = matches.reduce(function(a,t){return a+Math.abs(t.amount);},0);
+    return { count: matches.length, total: total };
+  }
   function renderAnalysis(){
     var forecastEl = document.getElementById('forecastCard');
     if(forecastEl){
@@ -1505,6 +1589,19 @@
     document.getElementById('anaIncome').textContent = fmtMaybeHidden(cur.income);
     document.getElementById('anaExpense').textContent = fmtMaybeHidden(cur.expense);
     document.getElementById('anaNet').textContent = fmtMaybeHidden(cur.income - cur.expense);
+
+    var antEl = document.getElementById('antSpendingCard');
+    if(antEl){
+      var ant = antSpendingSummary();
+      if(ant.count>0){
+        antEl.innerHTML = '<span class="small muted">Gasto hormiga este mes</span>'
+          +'<span class="amount" style="font-family:\'Space Grotesk\',sans-serif;font-weight:700;font-size:22px">'+fmtMaybeHidden(ant.total)+'</span>'
+          +'<span class="xsmall faint">'+ant.count+' compra'+(ant.count===1?'':'s')+' chica'+(ant.count===1?'':'s')+' (≤'+fmt(ANT_SPENDING_THRESHOLD)+' cada una) que suman esto — fácil de no notar, pero se acumula</span>';
+      } else {
+        antEl.innerHTML = '<span class="small muted">Gasto hormiga este mes</span>'
+          +'<span class="xsmall faint" style="margin-top:4px">Sin compras chicas (≤'+fmt(ANT_SPENDING_THRESHOLD)+') registradas todavía este mes.</span>';
+      }
+    }
 
     var svg = document.getElementById('anaChart');
     var max = Math.max.apply(null, data.map(function(d){return Math.max(d.income,d.expense);})) || 1;
@@ -1696,6 +1793,11 @@
     var date = document.getElementById('kpDate').value || todayISO();
     var editingId = document.getElementById('btnKpSave').dataset.editing;
     var signed = addType==='income' ? Math.abs(amount) : -Math.abs(amount);
+
+    if(desc && kpCategoryManual){
+      var memKey = normalizeDesc(desc);
+      if(memKey) state.merchantMemory[memKey] = categoryId;
+    }
 
     if(editingId){
       var t = state.transactions.find(function(x){return x.id===editingId;});
@@ -1912,12 +2014,20 @@
       debtEl.innerHTML = emptyState('wallet','Sin deudas registradas. Agrega una tarjeta o crédito para seguirle la pista.');
     } else {
       debtEl.innerHTML = state.debts.map(function(d){
+        var proj = debtPayoffProjection(d);
+        var projHtml = '';
+        if(proj && proj.neverPaysOff){
+          projHtml = '<div class="xsmall" style="color:var(--red)">Tu pago mensual no alcanza a cubrir el interés: la deuda no se va a pagar sola, sube el pago.</div>';
+        } else if(proj){
+          projHtml = '<div class="xsmall faint">Se paga en '+proj.months+' mes'+(proj.months===1?'':'es')+' (~'+payoffDateLabel(proj.months)+') · '+fmtMaybeHidden(proj.totalInterest)+' en intereses</div>';
+        }
         return '<div class="card" style="display:flex;flex-direction:column;gap:10px">'
           +'<div class="row" data-debt="'+d.id+'" style="cursor:pointer">'
             +'<div class="icon-circle" style="border-color:'+esc(d.color)+';background:color-mix(in srgb, '+esc(d.color)+' 16%, transparent)">'+iconSvg('wallet',d.color)+'</div>'
             +'<span class="tx-meta"><span class="name">'+esc(d.name)+'</span>'+(d.apr?('<span class="xsmall faint">'+d.apr+'% anual</span>'):'')+'</span>'
             +'<b style="font-size:14px">'+fmtMaybeHidden(d.balance)+'</b>'
           +'</div>'
+          +projHtml
           +'<button type="button" class="btn btn-ghost" data-debtpay="'+d.id+'" style="padding:9px">Pagar</button>'
         +'</div>';
       }).join('');
@@ -1992,6 +2102,7 @@
     document.getElementById('fDebtName').value = d ? d.name : '';
     document.getElementById('fDebtBalance').value = d ? d.balance : '';
     document.getElementById('fDebtApr').value = d ? (d.apr||'') : '';
+    document.getElementById('fDebtMinPayment').value = d ? (d.minPayment||'') : '';
     debtPickedColor = d ? d.color : PALETTE[Math.floor(Math.random()*PALETTE.length)];
     renderDebtColorPicker();
     document.getElementById('btnDebtDelete').style.display = d ? 'flex' : 'none';
@@ -2003,11 +2114,12 @@
     if(!name){ toast('Ponle un nombre a la deuda'); return; }
     var balance = parseInt(document.getElementById('fDebtBalance').value, 10) || 0;
     var apr = parseFloat(document.getElementById('fDebtApr').value) || 0;
+    var minPayment = parseInt(document.getElementById('fDebtMinPayment').value, 10) || 0;
     if(debtEditingId){
       var d = debtById(debtEditingId);
-      d.name = name; d.balance = balance; d.apr = apr; d.color = debtPickedColor;
+      d.name = name; d.balance = balance; d.apr = apr; d.minPayment = minPayment; d.color = debtPickedColor;
     } else {
-      state.debts.push({ id: uid(), name:name, balance:balance, apr:apr, color:debtPickedColor });
+      state.debts.push({ id: uid(), name:name, balance:balance, apr:apr, minPayment:minPayment, color:debtPickedColor });
     }
     saveState();
     closeDebtModal();
@@ -2051,14 +2163,38 @@
 
   // ---------- metas de ahorro ----------
 
+  function ensureEmergencyFundGoal(){
+    if(state.goals.some(function(g){return g.isEmergencyFund;})) return;
+    var months = lastNMonthKeys(3);
+    var avgExpense = months.reduce(function(a,mk){return a+monthTotals(mk).expense;},0) / months.length;
+    var suggested = Math.round(avgExpense*3) || 300000;
+    state.goals.push({ id:uid(), name:'Fondo de emergencia', target:suggested, saved:0, color:'#2DD4BF', isEmergencyFund:true });
+    saveState();
+  }
   function renderGoals(){
     var el = document.getElementById('goalList');
     if(!el) return;
-    if(!state.goals.length){
+    ensureEmergencyFundGoal();
+    var sortedGoals = state.goals.slice().sort(function(a,b){ return (b.isEmergencyFund?1:0)-(a.isEmergencyFund?1:0); });
+    if(!sortedGoals.length){
       el.innerHTML = emptyState('piggy','Crea una meta para empezar a ahorrar para algo concreto.');
     } else {
-      el.innerHTML = state.goals.map(function(g){
+      el.innerHTML = sortedGoals.map(function(g){
         var pct = g.target>0 ? Math.min(100, Math.round(g.saved/g.target*100)) : 0;
+        var remaining = Math.max(0, g.target-g.saved);
+        var paceHtml = '';
+        if(g.isEmergencyFund && !g.dueDate){
+          paceHtml = '<div class="xsmall faint">Recomendado: ~3 meses de tus gastos promedio, para imprevistos</div>';
+        } else if(remaining>0 && g.dueDate){
+          var daysLeft = Math.ceil((new Date(g.dueDate+'T00:00:00') - new Date(todayISO()+'T00:00:00')) / 86400000);
+          if(daysLeft<=0){
+            paceHtml = '<div class="xsmall" style="color:var(--red)">Venció el '+monthFullLabel(g.dueDate.slice(0,7))+' y faltan '+fmtMaybeHidden(remaining)+'</div>';
+          } else {
+            var monthsLeft = Math.max(1, Math.ceil(daysLeft/30));
+            var perMonth = Math.ceil(remaining/monthsLeft);
+            paceHtml = '<div class="xsmall faint">Aporta ~'+fmtMaybeHidden(perMonth)+'/mes para llegar a tiempo (vence '+monthFullLabel(g.dueDate.slice(0,7))+')</div>';
+          }
+        }
         return '<button type="button" class="card" data-goal="'+g.id+'" style="display:flex;flex-direction:column;gap:10px;text-align:left;color:inherit;width:100%">'
           +'<div class="row">'
             +'<div class="icon-circle" style="border-color:'+esc(g.color)+';background:color-mix(in srgb, '+esc(g.color)+' 16%, transparent)">'+iconSvg('piggy',g.color)+'</div>'
@@ -2066,6 +2202,7 @@
             +'<span class="small muted">'+fmtMaybeHidden(g.saved)+' / '+fmt(g.target)+'</span>'
           +'</div>'
           +'<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background-color:'+esc(g.color)+'"></div></div>'
+          +paceHtml
         +'</button>';
       }).join('');
     }
@@ -2088,6 +2225,7 @@
     document.getElementById('goalModalTitle').textContent = g ? 'Editar meta' : 'Nueva meta';
     document.getElementById('fGoalName').value = g ? g.name : '';
     document.getElementById('fGoalTarget').value = g ? g.target : '';
+    document.getElementById('fGoalDueDate').value = g ? (g.dueDate||'') : '';
     document.getElementById('fGoalContribute').value = '';
     document.getElementById('goalContributeField').style.display = g ? 'flex' : 'none';
     goalPickedColor = g ? g.color : PALETTE[Math.floor(Math.random()*PALETTE.length)];
@@ -2100,13 +2238,14 @@
     var name = document.getElementById('fGoalName').value.trim();
     if(!name){ toast('Ponle un nombre a la meta'); return; }
     var target = parseInt(document.getElementById('fGoalTarget').value, 10) || 0;
+    var dueDate = document.getElementById('fGoalDueDate').value || null;
     var contribute = parseInt(document.getElementById('fGoalContribute').value, 10) || 0;
     if(goalEditingId){
       var g = goalById(goalEditingId);
-      g.name = name; g.target = target; g.color = goalPickedColor;
+      g.name = name; g.target = target; g.dueDate = dueDate; g.color = goalPickedColor;
       g.saved = Math.max(0, (g.saved||0) + contribute);
     } else {
-      state.goals.push({ id: uid(), name:name, target:target, saved:Math.max(0,contribute), color:goalPickedColor });
+      state.goals.push({ id: uid(), name:name, target:target, dueDate:dueDate, saved:Math.max(0,contribute), color:goalPickedColor });
     }
     saveState();
     closeGoalModal();
@@ -2316,6 +2455,8 @@
   // Returns a matching category id, or null when nothing in the text matches.
   function matchCategory(text){
     var lower = text.toLowerCase();
+    var remembered = state.merchantMemory[normalizeDesc(text)];
+    if(remembered && state.categories.some(function(c){return c.id===remembered;})) return remembered;
     for(var id in CATEGORY_SYNONYMS){
       if(CATEGORY_SYNONYMS[id].some(function(w){ return hasWord(lower, w); })) return id;
     }
@@ -2554,7 +2695,8 @@
         var existingIds = {};
         state.transactions.forEach(function(t){ existingIds[t.id] = true; });
         var defaultAccountId = state.accounts[0].id;
-        var added = 0, skipped = 0;
+        var added = 0, skipped = 0, duplicates = 0;
+        var occurrenceInBatch = {};
         for(var r = headerIdx + 1; r < rows.length; r++){
           var row = rows[r];
           if(!row || !row.length) continue;
@@ -2564,8 +2706,16 @@
           var abono = parseCLPAmount(row[3]);
           if(!date || !desc || (cargo == null && abono == null)){ skipped++; continue; }
           var amount = cargo != null ? -Math.abs(cargo) : Math.abs(abono);
-          var id = 'xls:' + date + ':' + simpleHash(desc + '|' + cargo + '|' + abono + '|' + r);
-          if(existingIds[id]) continue;
+          // Content-based id (date+desc+amount), not the spreadsheet row number: a row's
+          // position shifts between exports that cover overlapping date ranges, but its
+          // content doesn't, so this is what lets a re-import recognize the same movement
+          // instead of adding it twice. The occurrence count only disambiguates genuine
+          // same-day same-amount repeats from each other, in file order.
+          var signature = 'xls:' + date + ':' + simpleHash(desc + '|' + cargo + '|' + abono);
+          var n = occurrenceInBatch[signature] || 0;
+          occurrenceInBatch[signature] = n + 1;
+          var id = signature + ':' + n;
+          if(existingIds[id]){ duplicates++; continue; }
           existingIds[id] = true;
           state.transactions.push({
             id: id, amount: amount, categoryId: guessCategory(desc) || 'otros', accountId: defaultAccountId,
@@ -2577,7 +2727,10 @@
         renderAll();
         if(added > 0){
           toast(added + ' movimiento' + (added === 1 ? '' : 's') + ' importado' + (added === 1 ? '' : 's')
+            + (duplicates ? ' (' + duplicates + ' ya existía' + (duplicates === 1 ? '' : 'n') + ')' : '')
             + (skipped ? ' (' + skipped + ' fila' + (skipped === 1 ? '' : 's') + ' sin reconocer)' : ''));
+        } else if(duplicates > 0){
+          toast('Esos ' + duplicates + ' movimiento' + (duplicates === 1 ? '' : 's') + ' ya estaba' + (duplicates === 1 ? '' : 'n') + ' importado' + (duplicates === 1 ? '' : 's'));
         } else {
           toast('No había movimientos nuevos para importar');
         }
@@ -2594,6 +2747,7 @@
     document.getElementById('toggleDecimals').checked = !!state.settings.decimals;
     document.getElementById('toggleHideBalances').checked = !!state.settings.hideBalances;
     document.getElementById('toggleHaptics').checked = !!state.settings.haptics;
+    document.getElementById('toggleBudgetRollover').checked = !!state.settings.budgetRollover;
     document.getElementById('selWeekStart').value = String(state.settings.weekStart);
     document.getElementById('inpMonthStart').value = state.settings.monthStart;
   }
@@ -2703,6 +2857,7 @@
   document.getElementById('toggleDecimals').addEventListener('change', function(e){ state.settings.decimals = e.target.checked; saveState(); renderAll(); });
   document.getElementById('toggleHideBalances').addEventListener('change', function(e){ state.settings.hideBalances = e.target.checked; saveState(); renderAll(); });
   document.getElementById('toggleHaptics').addEventListener('change', function(e){ state.settings.haptics = e.target.checked; saveState(); });
+  document.getElementById('toggleBudgetRollover').addEventListener('change', function(e){ state.settings.budgetRollover = e.target.checked; saveState(); renderAll(); });
   document.getElementById('selWeekStart').addEventListener('change', function(e){ state.settings.weekStart = parseInt(e.target.value,10); saveState(); });
   document.getElementById('inpMonthStart').addEventListener('change', function(e){ state.settings.monthStart = Math.min(28, Math.max(1, parseInt(e.target.value,10)||1)); saveState(); e.target.value = state.settings.monthStart; });
 
