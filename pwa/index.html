@@ -1776,7 +1776,7 @@
     document.getElementById('kpAmount').textContent = kpAmountStr;
     addType = existing ? (existing.amount>=0?'income':'expense') : 'expense';
     document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){ b.classList.toggle('sel', b.dataset.type===addType); });
-    kpCategoryManual = !!existing; // editing keeps its saved category; a new transaction can auto-guess from the description
+    kpCategoryManual = false; // retyping the description re-guesses the category (new or existing), until you pick one by hand
     kpFillCategories();
     if(existing){ kpSetActiveCategory(existing.categoryId); }
     kpFillAccounts();
@@ -2483,7 +2483,7 @@
     cafe:['café','cafe','starbucks','coffee'],
     entretenimiento:['cine','juego','entretenimiento'],
     ingresos:['sueldo','ingreso','depósito','deposito'],
-    mwurcje846s7jz:['anto','yur','yurley']
+    mwurcje846s7jz:['anto','yur','amor','yurley']
   };
   var CATEGORY_NAME_STOPWORDS = {y:1, de:1, la:1, el:1, los:1, las:1, del:1, en:1};
   // Returns a matching category id, or null when nothing in the text matches.
