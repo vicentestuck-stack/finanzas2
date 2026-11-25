@@ -297,6 +297,12 @@
     </div>
   </div>
 
+  <div id="viewOnlyBar" style="display:none;align-items:center;gap:10px;padding:10px 16px;background:color-mix(in srgb, var(--accent) 14%, transparent);border-bottom:1px solid var(--border)">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+    <span class="small" style="flex:1" id="viewOnlyLabel">Viendo (solo lectura)</span>
+    <button class="link-btn" id="btnExitViewOnly" type="button">Volver a mi cuenta</button>
+  </div>
+
   <nav class="sidebar" aria-label="Navegación principal">
     <div class="sidebar-brand">
       <div class="mark">F</div>
@@ -404,6 +410,10 @@
     <!-- ANÁLISIS -->
     <section class="view" data-view="analysis">
       <div class="card" id="forecastCard" style="display:flex;flex-direction:column;gap:4px"></div>
+      <div>
+        <div class="section-title"><h2>Próximos pagos</h2></div>
+        <div class="list" id="upcomingPaymentsList" style="margin-top:10px"></div>
+      </div>
       <div class="card">
         <div class="row" style="gap:20px;margin-bottom:10px">
           <div><span class="xsmall faint" style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>Ingresos</span><span class="amount-pos" id="anaIncome" style="font-size:16px;display:block;margin-top:2px">$0</span></div>
@@ -584,6 +594,25 @@
         </div>
       </div>
       <p class="xsmall faint" id="lockHint" style="margin:-10px 2px 0 2px">Protege la app con un PIN de 4 dígitos. Solo se guarda en este teléfono.</p>
+
+      <div class="settings-section">Compartir acceso</div>
+      <div class="card" id="shareNeedsLoginCard" style="display:none">
+        <p class="small muted" style="margin:0">Inicia sesión con tu cuenta en la nube para poder compartir el acceso a tus datos.</p>
+      </div>
+      <div class="card" id="shareInviteCard" style="display:flex;flex-direction:column;gap:10px">
+        <p class="small muted" style="margin:0">Invita a alguien por su correo para que vea —sin poder editar nada— solo las secciones que elijas. Esa persona debe crear su propia cuenta en Finsy con ese mismo correo.</p>
+        <div class="field" style="margin:0">
+          <label for="shareInviteEmail">Correo de la persona</label>
+          <input id="shareInviteEmail" type="email" placeholder="nombre@correo.com" autocomplete="off">
+        </div>
+        <div id="shareInvitePerms" style="display:flex;flex-direction:column;gap:2px"></div>
+        <button class="btn btn-primary" id="btnShareInviteSend" type="button">Enviar invitación</button>
+        <p class="xsmall faint" id="shareInviteMsg" style="margin:0"></p>
+        <div id="shareOutgoingList" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+
+      <div class="settings-section" id="shareIncomingSection" style="display:none">Cuentas compartidas conmigo</div>
+      <div class="card" id="shareIncomingCard" style="display:none;flex-direction:column;gap:8px"></div>
 
       <div class="settings-section">Conectar banco</div>
       <div class="card" id="cloudCard" style="display:flex;flex-direction:column;gap:10px">
@@ -1061,10 +1090,27 @@
     return id;
   })();
   var applyingRemoteState = false;
+  // True while looking at someone ELSE's data (a "shared access" invite we
+  // accepted). The single most important safety rail for that feature: as
+  // long as this stays true, saveState() never touches localStorage or
+  // pushes anything to the cloud, no matter which UI path got here — so even
+  // a missed read-only guard elsewhere can never persist a change to the
+  // wrong account or leak into the viewer's own data.
+  var viewOnlyMode = false;
   function saveState(){
+    if(viewOnlyMode) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     if(!applyingRemoteState) localStorage.setItem('finsy:localUpdatedAt', Date.now().toString());
     scheduleCloudPush();
+  }
+  // Belt-and-suspenders guard at every entry point that opens an edit modal
+  // or otherwise mutates data — on top of saveState() itself being a no-op
+  // in view-only mode, so nothing even LOOKS editable while viewing someone
+  // else's shared account.
+  function guardReadOnly(){
+    if(!viewOnlyMode) return false;
+    toast('Modo solo lectura: no puedes editar los datos de otra persona');
+    return true;
   }
 
   var state = loadState();
@@ -1095,6 +1141,21 @@
   var investEditingId = null;
   var investPickedColor = PALETTE[0];
   var sharedActivePersonId = null;
+
+  // ---------- shared (read-only) access ----------
+  var ownStateBackup = null;       // this device's real `state`, saved while viewOnlyMode is on
+  var viewOnlyOwnerId = null;      // the owner's auth user id, while viewing their shared data
+  var viewOnlyPermissions = null;  // {activity,summary,budgets,analysis,accounts} for the account being viewed
+  var viewOnlyOwnerLabel = '';     // the owner's email, for the banner
+  var mySharedInvites = [];        // rows where I'm the viewer (accepted or pending, addressed to my email)
+  var myOutgoingShares = [];       // rows where I'm the owner (people I've invited)
+  var SHARE_PERMISSION_VIEWS = [
+    { key:'summary',  label:'Resumen' },
+    { key:'activity', label:'Actividad' },
+    { key:'budgets',  label:'Presupuesto' },
+    { key:'analysis', label:'Análisis' },
+    { key:'accounts', label:'Cuentas' }
+  ];
 
   function catById(id){
     return state.categories.find(function(c){return c.id===id;})
@@ -1215,6 +1276,45 @@
       }
     });
     return balance + projected;
+  }
+
+  // Agenda of upcoming recurring transactions (bills/income), grouped by date,
+  // within the next `days` days — the "calendario de pagos" view in Análisis.
+  function upcomingRecurringOccurrences(days){
+    days = days || 45;
+    var today = todayISO();
+    var limit = new Date(); limit.setDate(limit.getDate()+days);
+    var limitISO = limit.getFullYear()+'-'+String(limit.getMonth()+1).padStart(2,'0')+'-'+String(limit.getDate()).padStart(2,'0');
+    var byDate = {};
+    state.recurring.forEach(function(r){
+      if(!r.active) return;
+      var d = r.nextDate, guard = 0;
+      while(d <= limitISO && guard < 40){
+        if(d >= today){ (byDate[d] = byDate[d] || []).push(r); }
+        d = addInterval(d, r.freq);
+        guard++;
+      }
+    });
+    var dates = Object.keys(byDate).sort();
+    return dates.map(function(d){ return { date:d, items:byDate[d] }; });
+  }
+  function renderUpcomingPayments(){
+    var el = document.getElementById('upcomingPaymentsList');
+    if(!el) return;
+    var groups = upcomingRecurringOccurrences(45);
+    if(!groups.length){ el.innerHTML = emptyState('repeat','Sin pagos ni ingresos recurrentes programados.'); return; }
+    el.innerHTML = groups.map(function(g){
+      var dayTotal = g.items.reduce(function(a,r){ return a+r.amount; }, 0);
+      return '<div class="xsmall faint" style="margin:10px 2px 2px 2px">'+esc(niceDate(g.date))+'</div>'
+        + g.items.map(function(r){
+          var cat = catById(r.categoryId);
+          return '<div class="tx-row" style="cursor:default">'
+            +'<div class="icon-circle" style="border-color:'+esc(cat.color)+';background:color-mix(in srgb, '+esc(cat.color)+' 16%, transparent)">'+iconSvg(cat.icon,cat.color)+'</div>'
+            +'<span class="tx-meta"><span class="name">'+esc(r.description||cat.name)+'</span><span class="xsmall faint">'+(r.freq==='weekly'?'Cada semana':'Cada mes')+'</span></span>'
+            +'<span class="'+(r.amount>=0?'amount-pos':'amount-neg')+'">'+(r.amount>=0?'+':'-')+(state.settings.hideBalances?'••••':fmt(r.amount))+'</span>'
+            +'</div>';
+        }).join('');
+    }).join('');
   }
 
   function financialHealthScore(){
@@ -1345,7 +1445,7 @@
     var titles = { activity:'Actividad', summary:'Resumen', budgets:'Presupuesto', analysis:'Análisis', accounts:'Cuentas', categories:'Categorías', chat:'Asistente', settings:'Ajustes', networth:'Patrimonio', subscriptions:'Suscripciones', shared:'Compartido' };
     document.getElementById('viewTitle').textContent = titles[v] || 'Finsy';
     var mainNavViews = { activity:1, summary:1, budgets:1, analysis:1, accounts:1 };
-    document.querySelector('.fab').style.display = mainNavViews[v] ? 'block' : 'none';
+    document.querySelector('.fab').style.display = (mainNavViews[v] && !viewOnlyMode) ? 'block' : 'none';
     renderAll();
     window.scrollTo(0,0);
   }
@@ -1363,6 +1463,7 @@
     renderNetWorth();
     renderSubscriptions();
     renderShared();
+    renderSharingSettings();
   }
 
   function emptyState(icon, text){
@@ -1761,6 +1862,7 @@
         +'<span class="amount" style="font-family:\'Space Grotesk\',sans-serif;font-weight:700;font-size:22px;color:'+(forecast<0?'var(--red)':'var(--text)')+'">'+fmtMaybeHidden(forecast)+'</span>'
         +'<span class="xsmall faint">Saldo actual más tus gastos e ingresos recurrentes que faltan este mes</span>';
     }
+    renderUpcomingPayments();
     var months = lastNMonthKeys(6);
     var data = months.map(function(mk){ return monthTotals(mk); });
     var cur = data[data.length-1];
@@ -1953,6 +2055,7 @@
     document.getElementById('kpAmount').textContent = kpAmountStr;
   }
   function openKeypad(existing){
+    if(guardReadOnly()) return;
     kpAmountStr = existing ? String(Math.abs(existing.amount)) : '0';
     document.getElementById('kpAmount').textContent = kpAmountStr;
     addType = existing ? (existing.amount>=0?'income':'expense') : 'expense';
@@ -2042,6 +2145,7 @@
   // ---------- budget modal ----------
 
   function openBudgetModal(categoryId){
+    if(guardReadOnly()) return;
     budgetEditingCategoryId = categoryId;
     var c = catById(categoryId);
     var b = budgetFor(categoryId);
@@ -2089,6 +2193,7 @@
     });
   }
   function openCategoryModal(categoryId){
+    if(guardReadOnly()) return;
     catEditingId = categoryId || null;
     var c = categoryId ? catById(categoryId) : null;
     document.getElementById('categoryModalTitle').textContent = c ? 'Editar categoría' : 'Nueva categoría';
@@ -2138,6 +2243,7 @@
     });
   }
   function openAccountModal(accountId){
+    if(guardReadOnly()) return;
     acctEditingId = accountId || null;
     var a = accountId ? acctById(accountId) : null;
     document.getElementById('accountModalTitle').textContent = a ? 'Editar cuenta' : 'Nueva cuenta';
@@ -2179,6 +2285,7 @@
   // ---------- transfer modal ----------
 
   function openTransferModal(){
+    if(guardReadOnly()) return;
     var fromSel = document.getElementById('fTransferFrom');
     var toSel = document.getElementById('fTransferTo');
     var opts = state.accounts.map(function(a){ return '<option value="'+a.id+'">'+esc(a.name)+'</option>'; }).join('');
@@ -2271,6 +2378,7 @@
     });
   }
   function openInvestmentModal(id){
+    if(guardReadOnly()) return;
     investEditingId = id || null;
     var i = id ? investmentById(id) : null;
     document.getElementById('investmentModalTitle').textContent = i ? 'Editar inversión' : 'Nueva inversión';
@@ -2317,6 +2425,7 @@
     });
   }
   function openDebtModal(id){
+    if(guardReadOnly()) return;
     debtEditingId = id || null;
     var d = id ? debtById(id) : null;
     document.getElementById('debtModalTitle').textContent = d ? 'Editar deuda' : 'Nueva deuda';
@@ -2358,6 +2467,7 @@
   }
 
   function openDebtPayModal(id){
+    if(guardReadOnly()) return;
     debtPayingId = id;
     var d = debtById(id);
     document.getElementById('debtPayModalTitle').textContent = 'Pagar · '+d.name;
@@ -2441,6 +2551,7 @@
     });
   }
   function openGoalModal(id){
+    if(guardReadOnly()) return;
     goalEditingId = id || null;
     var g = id ? goalById(id) : null;
     document.getElementById('goalModalTitle').textContent = g ? 'Editar meta' : 'Nueva meta';
@@ -2561,6 +2672,7 @@
     });
   }
   function openSharedPersonModal(){
+    if(guardReadOnly()) return;
     document.getElementById('fSharedPersonName').value = '';
     document.getElementById('modalSharedPerson').classList.add('open');
   }
@@ -2601,6 +2713,7 @@
     document.querySelectorAll('#modalSharedDetail [data-shareddir]').forEach(function(b){ b.classList.toggle('sel', b.dataset.shareddir===sharedEntryDir); });
   }
   function addSharedEntry(){
+    if(guardReadOnly()) return;
     var p = sharedPersonById(sharedActivePersonId);
     if(!p) return;
     var amount = parseInt(document.getElementById('fSharedEntryAmount').value, 10);
@@ -2616,6 +2729,7 @@
     toast('Movimiento agregado');
   }
   function settleShared(){
+    if(guardReadOnly()) return;
     var p = sharedPersonById(sharedActivePersonId);
     if(!p) return;
     var net = sharedPersonNet(p);
@@ -2628,6 +2742,7 @@
     toast('Marcado como saldado');
   }
   function deleteSharedPerson(){
+    if(guardReadOnly()) return;
     if(!sharedActivePersonId) return;
     if(!confirm('¿Eliminar esta persona y su historial?')) return;
     state.shared = state.shared.filter(function(p){return p.id!==sharedActivePersonId;});
@@ -3381,6 +3496,7 @@
   }
   function cloudSignOut(){
     var c = getCloudClient();
+    if(viewOnlyMode){ viewOnlyMode = false; viewOnlyOwnerId = null; viewOnlyPermissions = null; ownStateBackup = null; applyViewOnlyRestrictions(); }
     (c ? c.auth.signOut() : Promise.resolve()).finally(function(){
       // Explicit sign-out only (never on ordinary local-only use, where
       // there's simply no session yet) — otherwise this would erase a
@@ -3610,11 +3726,204 @@
     }).catch(function(){});
   }
 
+  // ---------- shared (read-only) access: invite someone by email to see
+  // chosen views of this account, never able to edit anything ----------
+
+  function normalizeEmail(e){ return String(e||'').trim().toLowerCase(); }
+
+  function permissionsSummary(perms){
+    var labels = SHARE_PERMISSION_VIEWS.filter(function(v){ return perms && perms[v.key]; }).map(function(v){ return v.label; });
+    return labels.length ? labels.join(', ') : 'Ninguna sección todavía';
+  }
+  function currentInvitePermissions(){
+    var perms = {};
+    SHARE_PERMISSION_VIEWS.forEach(function(v){
+      var cb = document.getElementById('shareperm_'+v.key);
+      perms[v.key] = cb ? cb.checked : false;
+    });
+    return perms;
+  }
+  function renderShareInvitePerms(){
+    var el = document.getElementById('shareInvitePerms');
+    if(!el || el.dataset.built) return; // build the checkboxes once; re-rendering would reset what the user just checked
+    el.dataset.built = '1';
+    el.innerHTML = SHARE_PERMISSION_VIEWS.map(function(v){
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;padding:4px 0;cursor:pointer">'
+        +'<input type="checkbox" id="shareperm_'+v.key+'"'+(v.key==='summary'?' checked':'')+'> '+esc(v.label)+'</label>';
+    }).join('');
+  }
+
+  // Pulls my outgoing invites (I'm the owner), claims any pending invite
+  // addressed to my own email (I'm the viewer), then loads my accepted
+  // incoming shares. Read-only queries only — nothing here can write to
+  // anyone else's data (the backing RLS policies wouldn't allow it anyway).
+  function loadSharingData(){
+    var c = getCloudClient();
+    if(!c || !cloudSession) return Promise.resolve();
+    var myEmail = normalizeEmail(cloudSession.user.email);
+    return c.from('shared_access').select('*').eq('owner_id', cloudSession.user.id).then(function(res){
+      myOutgoingShares = res.data || [];
+      return c.from('shared_access').select('*').eq('viewer_email', myEmail).eq('status','pending');
+    }).then(function(res){
+      var pending = res.data || [];
+      if(!pending.length) return null;
+      return Promise.all(pending.map(function(r){ return c.rpc('claim_shared_invite', { invite_id: r.id }); }));
+    }).then(function(){
+      return c.from('shared_access').select('*').eq('viewer_id', cloudSession.user.id).eq('status','accepted');
+    }).then(function(res){
+      mySharedInvites = res.data || [];
+      renderSharingSettings();
+    }).catch(function(){});
+  }
+
+  function sendShareInvite(){
+    var c = getCloudClient();
+    if(!c || !cloudSession){ toast('Inicia sesión primero'); return; }
+    var email = normalizeEmail(document.getElementById('shareInviteEmail').value);
+    if(!email || email.indexOf('@')===-1){ cloudAuthMsg('shareInviteMsg','Escribe un correo válido', true); return; }
+    if(email === normalizeEmail(cloudSession.user.email)){ cloudAuthMsg('shareInviteMsg','No puedes compartir contigo mismo', true); return; }
+    var perms = currentInvitePermissions();
+    if(!Object.keys(perms).some(function(k){ return perms[k]; })){ cloudAuthMsg('shareInviteMsg','Elige al menos una sección', true); return; }
+    var btn = document.getElementById('btnShareInviteSend');
+    btn.disabled = true;
+    var existing = myOutgoingShares.find(function(r){ return normalizeEmail(r.viewer_email)===email; });
+    var op = existing
+      ? c.from('shared_access').update({ permissions: perms }).eq('id', existing.id)
+      : c.from('shared_access').insert({ owner_id: cloudSession.user.id, owner_email: normalizeEmail(cloudSession.user.email), viewer_email: email, permissions: perms, status:'pending' });
+    op.then(function(res){
+      btn.disabled = false;
+      if(res.error){ cloudAuthMsg('shareInviteMsg', res.error.message, true); return; }
+      cloudAuthMsg('shareInviteMsg', existing ? 'Permisos actualizados.' : 'Invitación enviada. Pídele que cree su propia cuenta en Finsy con ese mismo correo.', false);
+      document.getElementById('shareInviteEmail').value = '';
+      loadSharingData();
+    }).catch(function(){ btn.disabled = false; cloudAuthMsg('shareInviteMsg','No se pudo enviar (revisa tu conexión)', true); });
+  }
+  function removeOutgoingShare(id){
+    var c = getCloudClient();
+    if(!c) return;
+    c.from('shared_access').delete().eq('id', id).then(function(){ toast('Acceso eliminado'); loadSharingData(); })
+      .catch(function(){ toast('No se pudo quitar el acceso'); });
+  }
+  function leaveSharedAccess(id){
+    var c = getCloudClient();
+    if(!c) return;
+    if(viewOnlyMode && viewOnlyOwnerId){ exitViewOnlyMode(); }
+    c.rpc('leave_shared_access', { invite_id: id }).then(function(){ toast('Saliste de esa cuenta compartida'); loadSharingData(); })
+      .catch(function(){ toast('No se pudo salir de esa cuenta'); });
+  }
+
+  // Hides/shows nav, FAB and topbar icons that only make sense for MY OWN
+  // account — the actual write protection is saveState()+guardReadOnly(),
+  // this is just so the UI never looks editable in the first place.
+  function applyViewOnlyRestrictions(){
+    var bar = document.getElementById('viewOnlyBar');
+    if(bar) bar.style.display = viewOnlyMode ? 'flex' : 'none';
+    var label = document.getElementById('viewOnlyLabel');
+    if(label) label.textContent = 'Viendo (solo lectura): ' + viewOnlyOwnerLabel;
+    var btnSettings = document.getElementById('btnSettings'); if(btnSettings) btnSettings.style.display = viewOnlyMode ? 'none' : '';
+    var btnChat = document.getElementById('btnChat'); if(btnChat) btnChat.style.display = viewOnlyMode ? 'none' : '';
+    var sidebarAdd = document.getElementById('btnAddSidebar'); if(sidebarAdd) sidebarAdd.style.display = viewOnlyMode ? 'none' : '';
+    var mainNav = { activity:1, summary:1, budgets:1, analysis:1, accounts:1 };
+    document.querySelectorAll('[data-nav]').forEach(function(el){
+      var v = el.dataset.nav;
+      if(!mainNav[v]) return;
+      el.style.display = (viewOnlyMode && viewOnlyPermissions && !viewOnlyPermissions[v]) ? 'none' : '';
+    });
+  }
+
+  function enterViewOnlyMode(shareId){
+    var share = mySharedInvites.find(function(s){ return s.id===shareId; });
+    var c = getCloudClient();
+    if(!share || !c) return;
+    c.from('user_state').select('state').eq('user_id', share.owner_id).maybeSingle().then(function(res){
+      if(res.error || !res.data){ toast('No se pudo cargar esa cuenta'); return; }
+      if(!viewOnlyMode) ownStateBackup = state; // keep my own real data safe, exactly once
+      stopRealtimeSync(); // my own account's realtime must never overwrite what's on screen while viewing someone else's
+      state = normalizeState(res.data.state);
+      viewOnlyMode = true;
+      viewOnlyOwnerId = share.owner_id;
+      viewOnlyPermissions = share.permissions || {};
+      viewOnlyOwnerLabel = share.owner_email || share.viewer_email || 'cuenta compartida';
+      applyViewOnlyRestrictions();
+      var allowedKeys = SHARE_PERMISSION_VIEWS.map(function(v){ return v.key; }).filter(function(k){ return viewOnlyPermissions[k]; });
+      setView(allowedKeys[0] || 'summary');
+      toast('Viendo (solo lectura): ' + viewOnlyOwnerLabel);
+    }).catch(function(){ toast('No se pudo cargar esa cuenta (revisa tu conexión)'); });
+  }
+  function exitViewOnlyMode(){
+    if(!viewOnlyMode) return;
+    state = ownStateBackup || loadState();
+    ownStateBackup = null;
+    viewOnlyMode = false;
+    viewOnlyOwnerId = null;
+    viewOnlyPermissions = null;
+    viewOnlyOwnerLabel = '';
+    applyViewOnlyRestrictions();
+    if(cloudSession) startRealtimeSync();
+    setView('activity');
+    toast('De vuelta en tu cuenta');
+  }
+
+  function renderSharingSettings(){
+    renderShareInvitePerms();
+    var needsLogin = document.getElementById('shareNeedsLoginCard');
+    var inviteCard = document.getElementById('shareInviteCard');
+    if(needsLogin && inviteCard){
+      var loggedIn = !!cloudSession;
+      needsLogin.style.display = loggedIn ? 'none' : 'block';
+      inviteCard.style.display = loggedIn ? 'flex' : 'none';
+    }
+    var outEl = document.getElementById('shareOutgoingList');
+    if(outEl){
+      outEl.innerHTML = myOutgoingShares.length ? myOutgoingShares.map(function(s){
+        var statusLabel = s.status==='accepted' ? 'Activo' : s.status==='revoked' ? 'Desactivado' : 'Pendiente (aún no crea su cuenta)';
+        var dotClass = s.status==='accepted' ? 'ok' : s.status==='revoked' ? '' : 'warn';
+        return '<div class="settings-row" style="padding:8px 0;border-top:1px solid var(--border);align-items:flex-start">'
+          +'<span class="lbl"><span class="status-dot '+dotClass+'"></span>'+esc(s.viewer_email)+'<br><span class="xsmall faint">Puede ver: '+esc(permissionsSummary(s.permissions))+' · '+statusLabel+'</span></span>'
+          +'<button type="button" class="link-btn" data-removeshare="'+s.id+'">Quitar</button>'
+          +'</div>';
+      }).join('') : '<p class="xsmall faint" style="margin:0">Todavía no has compartido tu cuenta con nadie.</p>';
+      outEl.querySelectorAll('[data-removeshare]').forEach(function(btn){
+        btn.addEventListener('click', function(){ removeOutgoingShare(btn.dataset.removeshare); });
+      });
+    }
+    var inSection = document.getElementById('shareIncomingSection');
+    var inCard = document.getElementById('shareIncomingCard');
+    if(inSection && inCard){
+      if(mySharedInvites.length){
+        inSection.style.display = 'block';
+        inCard.style.display = 'flex';
+        inCard.innerHTML = mySharedInvites.map(function(s){
+          var isViewing = viewOnlyMode && viewOnlyOwnerId===s.owner_id;
+          return '<div class="settings-row" style="padding:8px 0;border-top:1px solid var(--border);align-items:flex-start">'
+            +'<span class="lbl">'+esc(s.owner_email || 'Cuenta compartida')+'<br><span class="xsmall faint">Puedes ver: '+esc(permissionsSummary(s.permissions))+'</span></span>'
+            +'<div style="display:flex;gap:6px;flex-shrink:0">'
+            +'<button type="button" class="btn btn-ghost" data-viewshare="'+s.id+'" style="padding:8px 14px;font-size:12.5px">'+(isViewing?'Viendo ahora':'Ver')+'</button>'
+            +'<button type="button" class="link-btn" data-leaveshare="'+s.id+'">Salir</button>'
+            +'</div></div>';
+        }).join('');
+        inCard.querySelectorAll('[data-viewshare]').forEach(function(btn){
+          btn.addEventListener('click', function(){ enterViewOnlyMode(btn.dataset.viewshare); });
+        });
+        inCard.querySelectorAll('[data-leaveshare]').forEach(function(btn){
+          btn.addEventListener('click', function(){ leaveSharedAccess(btn.dataset.leaveshare); });
+        });
+      } else {
+        inSection.style.display = 'none';
+        inCard.style.display = 'none';
+      }
+    }
+  }
+
   // Wipes this device's local cache back to a blank slate. Used whenever an
   // account's session ends here (or a DIFFERENT account signs in on a
   // shared device), so one person's financial data never lingers in
   // localStorage for the next person who opens Finsy on the same device.
   function resetLocalStateForNewAccount(){
+    // A different account taking over this device can never be left looking
+    // at whatever someone else's shared data happened to be on screen.
+    if(viewOnlyMode){ viewOnlyMode = false; viewOnlyOwnerId = null; viewOnlyPermissions = null; ownStateBackup = null; applyViewOnlyRestrictions(); }
+    mySharedInvites = []; myOutgoingShares = [];
     applyingRemoteState = true;
     state = seedState();
     localStorage.removeItem('finsy:localUpdatedAt');
@@ -3633,10 +3942,13 @@
       cloudRefreshBankStatus().then(function(){ renderCloudSettings(); if(navigator.onLine) cloudSync(); });
       initialCloudStateSync();
       startRealtimeSync();
+      loadSharingData();
     } else {
       stopRealtimeSync();
       cloudBankConnected = false; cloudStatusInfo = null;
+      mySharedInvites = []; myOutgoingShares = [];
       renderCloudSettings();
+      renderSharingSettings();
       showGate();
     }
   }
@@ -3660,6 +3972,8 @@
   document.getElementById('btnConnectBank').addEventListener('click', cloudConnectBank);
   document.getElementById('btnConnectAnotherBank').addEventListener('click', cloudConnectBank);
   document.getElementById('btnSyncNow').addEventListener('click', cloudSync);
+  document.getElementById('btnShareInviteSend').addEventListener('click', sendShareInvite);
+  document.getElementById('btnExitViewOnly').addEventListener('click', exitViewOnlyMode);
 
   // install prompt
   var deferredPrompt = null;
