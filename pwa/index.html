@@ -253,6 +253,33 @@
   </div>
 </div>
 
+<div id="lockScreen" style="display:none;position:fixed;inset:0;z-index:110;background:var(--bg);overflow-y:auto">
+  <div style="max-width:340px;margin:0 auto;min-height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px 24px;gap:22px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="mark" style="width:34px;height:34px;border-radius:10px;font-size:17px">F</div>
+      <span style="font-weight:700;font-size:19px;font-family:'Space Grotesk',sans-serif">Finsy</span>
+    </div>
+    <p class="small muted" style="margin:0;text-align:center">Ingresa tu PIN para continuar</p>
+    <div id="lockDots" style="display:flex;gap:14px;margin:4px 0"></div>
+    <p class="small" id="lockMsg" style="color:var(--red);margin:0;min-height:16px;text-align:center"></p>
+    <div id="lockKeypad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:260px">
+      <button type="button" class="btn btn-ghost" data-lockkey="1" style="font-size:20px;padding:18px">1</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="2" style="font-size:20px;padding:18px">2</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="3" style="font-size:20px;padding:18px">3</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="4" style="font-size:20px;padding:18px">4</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="5" style="font-size:20px;padding:18px">5</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="6" style="font-size:20px;padding:18px">6</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="7" style="font-size:20px;padding:18px">7</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="8" style="font-size:20px;padding:18px">8</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="9" style="font-size:20px;padding:18px">9</button>
+      <div></div>
+      <button type="button" class="btn btn-ghost" data-lockkey="0" style="font-size:20px;padding:18px">0</button>
+      <button type="button" class="btn btn-ghost" data-lockkey="back" style="font-size:16px;padding:18px">⌫</button>
+    </div>
+    <button type="button" class="btn btn-primary" id="btnLockBiometric" style="display:none;width:100%;max-width:260px">Usar Face ID / Touch ID</button>
+  </div>
+</div>
+
 <div id="app" style="display:none">
 
   <div class="topbar">
@@ -327,6 +354,11 @@
         <svg class="barchart" id="actChart" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
       <div class="chipscroll" id="actFilterRow"></div>
+      <div class="row" style="gap:8px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:4px 6px 4px 12px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--text-dim)" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="actSearchInput" placeholder="Buscar en todos tus movimientos" style="flex:1;background:none;border:none;color:inherit;font:inherit;padding:10px 0" autocomplete="off">
+        <button type="button" class="icon-btn" id="actSearchClear" aria-label="Limpiar búsqueda" style="display:none;width:30px;height:30px;flex-shrink:0">✕</button>
+      </div>
       <div class="list" id="actList"></div>
     </section>
 
@@ -348,6 +380,10 @@
         <div class="section-title"><h2>Por categoría</h2></div>
         <div class="list" id="summaryCategories" style="margin-top:10px"></div>
       </div>
+      <button class="btn btn-ghost" id="btnShareSummary" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>
+        Compartir resumen del mes
+      </button>
     </section>
 
     <!-- PRESUPUESTO -->
@@ -378,6 +414,12 @@
       <div class="card" style="display:flex;flex-direction:column;gap:4px">
         <span class="small muted">Ingresos restantes</span>
         <span class="amount" id="anaNet" style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px">$0</span>
+      </div>
+      <div class="card" style="display:flex;flex-direction:column;gap:4px">
+        <span class="small muted">Tasa de ahorro este mes</span>
+        <span class="amount" id="anaSavingsRate" style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px">0%</span>
+        <span class="xsmall faint">% de tus ingresos que no gastaste</span>
+        <svg class="barchart" id="anaSavingsChart" viewBox="0 0 320 90" preserveAspectRatio="none" aria-hidden="true" style="height:100px;margin-top:8px"></svg>
       </div>
       <div class="card" id="antSpendingCard" style="display:flex;flex-direction:column;gap:4px"></div>
       <div>
@@ -529,6 +571,19 @@
         <span class="xsmall faint" id="pushStatusLabel">Comprobando…</span>
         <button class="btn btn-primary" id="btnPushToggle" type="button">Activar notificaciones</button>
       </div>
+
+      <div class="settings-section">Seguridad</div>
+      <div class="card" style="padding:4px 14px">
+        <div class="settings-row" id="rowAppLock" style="border-bottom:1px solid var(--border)">
+          <span class="lbl">Bloquear Finsy con PIN</span>
+          <label class="switch"><input type="checkbox" id="toggleAppLock"><span class="track"></span><span class="knob"></span></label>
+        </div>
+        <div class="settings-row" id="rowBiometric" style="display:none">
+          <span class="lbl">Usar Face ID / Touch ID</span>
+          <label class="switch"><input type="checkbox" id="toggleBiometric"><span class="track"></span><span class="knob"></span></label>
+        </div>
+      </div>
+      <p class="xsmall faint" id="lockHint" style="margin:-10px 2px 0 2px">Protege la app con un PIN de 4 dígitos. Solo se guarda en este teléfono.</p>
 
       <div class="settings-section">Conectar banco</div>
       <div class="card" id="cloudCard" style="display:flex;flex-direction:column;gap:10px">
@@ -1016,6 +1071,7 @@
   var currentView = 'activity';
   var actFilter = null;
   var actMonth = monthKey(); // month shown in Actividad; changes via the ‹ › arrows
+  var actSearch = ''; // when non-empty, Actividad lists matches across ALL months instead of just actMonth
   var summaryFilter = null;
   var summaryExpandedCategory = null; // category id currently expanded in "Por categoría", or null
   var summaryMonth = monthKey(); // month shown in Resumen; changes when the user taps a bar in "Por mes"
@@ -1367,13 +1423,24 @@
 
     renderDayBars();
 
+    var searching = actSearch.trim().length > 0;
+    var searchTerm = normalizeDesc(actSearch);
     var list = state.transactions
-      .filter(function(t){ return !t.isTransfer && (!actFilter || t.accountId===actFilter) && monthKey(t.date)===mk; })
+      .filter(function(t){
+        if(t.isTransfer || (actFilter && t.accountId!==actFilter)) return false;
+        if(searching){
+          var cat = catById(t.categoryId);
+          return normalizeDesc(t.description).indexOf(searchTerm)>-1 || normalizeDesc(cat.name).indexOf(searchTerm)>-1;
+        }
+        return monthKey(t.date)===mk;
+      })
       .sort(function(a,b){ return (b.date+b.createdAt) > (a.date+a.createdAt) ? 1 : -1; });
 
     var el = document.getElementById('actList');
     if(!list.length){
-      el.innerHTML = emptyState('cart', 'Todavía no hay movimientos. Usa el botón "+" o pídeselo a Nia.');
+      el.innerHTML = searching
+        ? emptyState('cart', 'Sin resultados para "'+esc(actSearch)+'".')
+        : emptyState('cart', 'Todavía no hay movimientos. Usa el botón "+" o pídeselo a Nia.');
     } else {
       var html = '', lastDay = null;
       list.forEach(function(t){
@@ -1526,6 +1593,91 @@
     }
   }
 
+  // Renders a shareable "month in review" image (canvas) and hands it to the
+  // OS share sheet when available, falling back to a plain download.
+  function shareMonthSummary(){
+    var mk = summaryMonth;
+    var t = monthTotals(mk, summaryFilter);
+    var cats = state.categories.filter(function(c){return c.kind!=='income';})
+      .map(function(c){ return {c:c, spend: categorySpend(c.id, mk)}; })
+      .filter(function(x){return x.spend>0;})
+      .sort(function(a,b){return b.spend-a.spend;})
+      .slice(0,5);
+    var totalCatSpend = cats.reduce(function(a,x){return a+x.spend;},0) || 1;
+
+    var W=720, H=960;
+    var canvas = document.createElement('canvas');
+    canvas.width=W; canvas.height=H;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0A0B0D'; ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle = '#F2B705';
+    if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(50,50,52,52,14); ctx.fill(); }
+    else { ctx.fillRect(50,50,52,52); }
+    ctx.fillStyle = '#1A1400'; ctx.font = '700 26px "Space Grotesk", sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('F', 76, 80);
+    ctx.fillStyle = '#F4F5F6'; ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.font='700 26px "Space Grotesk", sans-serif';
+    ctx.fillText('Finsy', 118, 85);
+
+    ctx.fillStyle = '#9BA0A6'; ctx.font = '500 20px Inter, sans-serif';
+    var monthLbl = (mk===monthKey()) ? 'Este mes' : monthFullLabel(mk);
+    ctx.fillText(monthLbl, 50, 150);
+
+    ctx.fillStyle = '#F4F5F6'; ctx.font = '700 60px "Space Grotesk", sans-serif';
+    ctx.fillText(fmtMaybeHidden(t.expense), 50, 215);
+    ctx.fillStyle = '#9BA0A6'; ctx.font = '400 20px Inter, sans-serif';
+    ctx.fillText('gastado este mes', 50, 248);
+
+    ctx.fillStyle = '#34D399'; ctx.font='600 15px Inter, sans-serif'; ctx.fillText('Ingresos', 50, 300);
+    ctx.fillStyle = '#F4F5F6'; ctx.font='700 22px "Space Grotesk", sans-serif'; ctx.fillText(fmtMaybeHidden(t.income), 50, 328);
+
+    var remaining = t.income - t.expense;
+    ctx.fillStyle = '#9BA0A6'; ctx.font='600 15px Inter, sans-serif'; ctx.fillText('Te queda', 370, 300);
+    ctx.fillStyle = remaining<0 ? '#FB7185' : '#F4F5F6'; ctx.font='700 22px "Space Grotesk", sans-serif'; ctx.fillText(fmtMaybeHidden(remaining), 370, 328);
+
+    ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.beginPath(); ctx.moveTo(50,370); ctx.lineTo(W-50,370); ctx.stroke();
+
+    ctx.fillStyle = '#F4F5F6'; ctx.font='700 20px "Space Grotesk", sans-serif';
+    ctx.fillText('Por categoría', 50, 410);
+    var y = 452;
+    if(!cats.length){
+      ctx.fillStyle = '#6A6F75'; ctx.font='400 16px Inter, sans-serif';
+      ctx.fillText('Sin gastos categorizados este mes.', 50, y);
+    }
+    cats.forEach(function(x){
+      var pct = Math.round(x.spend/totalCatSpend*100);
+      ctx.fillStyle = x.c.color;
+      ctx.beginPath(); ctx.arc(62, y-6, 8, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#F4F5F6'; ctx.font='600 18px Inter, sans-serif'; ctx.textAlign='left';
+      ctx.fillText(x.c.name, 84, y);
+      ctx.fillStyle = '#9BA0A6'; ctx.font='500 16px Inter, sans-serif'; ctx.textAlign='right';
+      ctx.fillText(fmtMaybeHidden(x.spend)+' · '+pct+'%', W-50, y);
+      ctx.textAlign='left';
+      ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(84, y+12, W-134, 8);
+      ctx.fillStyle = x.c.color; ctx.fillRect(84, y+12, (W-134)*pct/100, 8);
+      y += 58;
+    });
+
+    ctx.fillStyle = '#6A6F75'; ctx.font='400 14px Inter, sans-serif'; ctx.textAlign='center';
+    ctx.fillText('Hecho con Finsy', W/2, H-40);
+
+    canvas.toBlob(function(blob){
+      if(!blob){ toast('No se pudo generar la imagen'); return; }
+      var file = new File([blob], 'finsy-resumen-'+mk+'.png', {type:'image/png'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title:'Mi resumen de Finsy'}).catch(function(){});
+      } else {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'finsy-resumen-'+mk+'.png';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+        toast('Resumen descargado');
+      }
+    }, 'image/png');
+  }
+  document.getElementById('btnShareSummary').addEventListener('click', shareMonthSummary);
+
   // ---- PRESUPUESTO ----
   function renderBudgets(){
     var mk = monthKey();
@@ -1615,6 +1767,31 @@
     document.getElementById('anaIncome').textContent = fmtMaybeHidden(cur.income);
     document.getElementById('anaExpense').textContent = fmtMaybeHidden(cur.expense);
     document.getElementById('anaNet').textContent = fmtMaybeHidden(cur.income - cur.expense);
+
+    var savingsRates = data.map(function(d){
+      return d.income>0 ? Math.round((d.income-d.expense)/d.income*100) : (d.expense>0 ? -100 : 0);
+    });
+    var curRate = savingsRates[savingsRates.length-1];
+    var rateEl = document.getElementById('anaSavingsRate');
+    rateEl.textContent = curRate+'%';
+    rateEl.style.color = curRate<0 ? 'var(--red)' : curRate>=20 ? 'var(--green)' : 'var(--text)';
+    var rateSvg = document.getElementById('anaSavingsChart');
+    if(rateSvg){
+      var rw=320, rh=90, rzero=rh/2, rgroupW=rw/months.length;
+      var rbarW = Math.max(10, rgroupW-18);
+      var rmaxAbs = Math.max(20, Math.max.apply(null, savingsRates.map(function(r){return Math.abs(r);})));
+      var rbars = '';
+      savingsRates.forEach(function(r,i){
+        var rx = i*rgroupW + (rgroupW-rbarW)/2;
+        var barH = Math.max(2, Math.abs(r)/rmaxAbs*(rzero-14));
+        var y = r>=0 ? rzero-barH : rzero;
+        var color = r<0 ? 'var(--red)' : 'var(--green)';
+        rbars += '<rect x="'+rx.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+rbarW.toFixed(1)+'" height="'+barH.toFixed(1)+'" rx="2" fill="'+color+'"/>';
+        rbars += '<text x="'+(rx+rbarW/2).toFixed(1)+'" y="'+(rh-4)+'" font-size="10" fill="rgba(255,255,255,.4)" text-anchor="middle">'+monthLabel(months[i])+'</text>';
+      });
+      rbars += '<line x1="0" y1="'+rzero.toFixed(1)+'" x2="'+rw+'" y2="'+rzero.toFixed(1)+'" stroke="rgba(255,255,255,.12)" stroke-width="1"/>';
+      rateSvg.innerHTML = rbars;
+    }
 
     var antEl = document.getElementById('antSpendingCard');
     if(antEl){
@@ -2822,6 +2999,17 @@
   document.getElementById('btnAddSidebar').addEventListener('click', function(){ openKeypad(null); });
   document.getElementById('actMonthPrev').addEventListener('click', function(){ actMonth = shiftMonthKey(actMonth, -1); renderActivity(); });
   document.getElementById('actMonthNext').addEventListener('click', function(){ if(actMonth===monthKey()) return; actMonth = shiftMonthKey(actMonth, 1); renderActivity(); });
+  document.getElementById('actSearchInput').addEventListener('input', function(){
+    actSearch = this.value;
+    document.getElementById('actSearchClear').style.display = actSearch ? 'flex' : 'none';
+    renderActivity();
+  });
+  document.getElementById('actSearchClear').addEventListener('click', function(){
+    actSearch = '';
+    document.getElementById('actSearchInput').value = '';
+    this.style.display = 'none';
+    renderActivity();
+  });
   document.getElementById('btnKeypadClose').addEventListener('click', closeKeypad);
   document.getElementById('btnKpSave').addEventListener('click', saveKeypad);
   document.getElementById('btnKpDelete').addEventListener('click', deleteKeypad);
@@ -3000,11 +3188,177 @@
     document.getElementById('app').style.display = 'none';
     document.getElementById('gateOfflineNote').style.display = navigator.onLine ? 'none' : 'block';
   }
-  function hideGate(){
-    document.getElementById('authGate').style.display = 'none';
+  function revealApp(){
     document.getElementById('app').style.display = 'flex';
     maybeOpenQuickAdd();
   }
+  function hideGate(){
+    document.getElementById('authGate').style.display = 'none';
+    if(getLockConfig().enabled){ startLockFlow('unlock'); } else { revealApp(); }
+  }
+
+  // ---------- app lock (local PIN + optional Face ID / Touch ID) ----------
+  // Kept entirely in its own localStorage key, never inside the synced
+  // `finsy:v1` state, so it's per-device and cloud sync can't touch it.
+  var LOCK_KEY = 'finsy:lock';
+  function getLockConfig(){
+    try{ return JSON.parse(localStorage.getItem(LOCK_KEY)||'{}'); }catch(e){ return {}; }
+  }
+  function saveLockConfig(cfg){ localStorage.setItem(LOCK_KEY, JSON.stringify(cfg)); }
+  function randomHex(n){
+    var arr = new Uint8Array(n);
+    crypto.getRandomValues(arr);
+    return Array.prototype.map.call(arr, function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  }
+  function hashPin(pin, salt){
+    var enc = new TextEncoder().encode(pin+':'+salt);
+    return crypto.subtle.digest('SHA-256', enc).then(function(buf){
+      return Array.prototype.map.call(new Uint8Array(buf), function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+    });
+  }
+
+  var lockMode = null; // 'unlock' | 'setup-new' | 'setup-confirm' | 'disable-confirm'
+  var lockBuffer = '';
+  var lockPendingPin = '';
+  var biometricAvailable = false;
+
+  function renderLockDots(){
+    var dots = document.getElementById('lockDots'), html = '';
+    for(var i=0;i<4;i++){
+      html += '<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--border);display:inline-block;background:'+(i<lockBuffer.length?'var(--accent)':'var(--surface-3)')+'"></span>';
+    }
+    dots.innerHTML = html;
+  }
+  function lockTitle(text){ var el = document.querySelector('#lockScreen p.muted'); if(el) el.textContent = text; }
+  function lockMsgSet(text){ document.getElementById('lockMsg').textContent = text||''; }
+
+  function startLockFlow(mode){
+    lockMode = mode; lockBuffer = ''; lockPendingPin = '';
+    lockMsgSet('');
+    renderLockDots();
+    lockTitle(
+      mode==='unlock' ? 'Ingresa tu PIN para continuar' :
+      mode==='setup-new' ? 'Crea un PIN nuevo' :
+      mode==='setup-confirm' ? 'Confirma tu PIN' :
+      'Ingresa tu PIN actual para desactivar'
+    );
+    var cfg = getLockConfig();
+    document.getElementById('btnLockBiometric').style.display = (mode==='unlock' && cfg.useBiometric && cfg.credentialId) ? 'block' : 'none';
+    document.getElementById('lockScreen').style.display = 'block';
+    if(mode==='unlock' && cfg.useBiometric && cfg.credentialId) tryBiometricUnlock();
+  }
+  function closeLockFlow(){
+    document.getElementById('lockScreen').style.display = 'none';
+    lockMode = null; lockBuffer=''; lockPendingPin='';
+  }
+  function lockKeyPress(k){
+    if(k==='back'){ lockBuffer = lockBuffer.slice(0,-1); renderLockDots(); return; }
+    if(lockBuffer.length>=4) return;
+    vibrate(8);
+    lockBuffer += k;
+    renderLockDots();
+    if(lockBuffer.length===4) setTimeout(handleLockComplete, 120);
+  }
+  function handleLockComplete(){
+    var cfg = getLockConfig();
+    if(lockMode==='unlock'){
+      hashPin(lockBuffer, cfg.salt).then(function(h){
+        if(h===cfg.pinHash){ closeLockFlow(); revealApp(); }
+        else { vibrate(30); lockMsgSet('PIN incorrecto'); lockBuffer=''; renderLockDots(); }
+      });
+    } else if(lockMode==='setup-new'){
+      lockPendingPin = lockBuffer; lockBuffer = ''; lockMode = 'setup-confirm';
+      lockTitle('Confirma tu PIN'); renderLockDots();
+    } else if(lockMode==='setup-confirm'){
+      if(lockBuffer !== lockPendingPin){
+        lockMsgSet('No coincide, intenta de nuevo');
+        lockBuffer=''; lockPendingPin=''; lockMode='setup-new';
+        lockTitle('Crea un PIN nuevo'); renderLockDots();
+        return;
+      }
+      var salt = randomHex(16);
+      hashPin(lockBuffer, salt).then(function(h){
+        var c = getLockConfig();
+        c.enabled = true; c.salt = salt; c.pinHash = h;
+        saveLockConfig(c);
+        closeLockFlow();
+        reflectLockUI();
+        toast('PIN activado');
+      });
+    } else if(lockMode==='disable-confirm'){
+      hashPin(lockBuffer, cfg.salt).then(function(h){
+        if(h===cfg.pinHash){
+          saveLockConfig({enabled:false});
+          closeLockFlow();
+          reflectLockUI();
+          toast('Bloqueo desactivado');
+        } else { vibrate(30); lockMsgSet('PIN incorrecto'); lockBuffer=''; renderLockDots(); }
+      });
+    }
+  }
+  document.querySelectorAll('#lockKeypad [data-lockkey]').forEach(function(b){
+    b.addEventListener('click', function(){ lockKeyPress(b.dataset.lockkey); });
+  });
+
+  function bufToBase64(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))); }
+  function base64ToBuf(b64){ var bin = atob(b64), arr = new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return arr; }
+  function checkBiometricAvailable(){
+    if(!window.PublicKeyCredential || !PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return Promise.resolve(false);
+    return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function(){ return false; });
+  }
+  function registerBiometric(){
+    return navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: 'Finsy' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'finsy-local', displayName: 'Finsy' },
+      pubKeyCredParams: [{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+      timeout: 30000
+    }}).then(function(cred){
+      var c = getLockConfig();
+      c.useBiometric = true; c.credentialId = bufToBase64(cred.rawId);
+      saveLockConfig(c);
+    });
+  }
+  function tryBiometricUnlock(){
+    var cfg = getLockConfig();
+    if(!cfg.credentialId) return;
+    navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ id: base64ToBuf(cfg.credentialId), type:'public-key' }],
+      userVerification: 'required',
+      timeout: 30000
+    }}).then(function(){ closeLockFlow(); revealApp(); })
+    .catch(function(){ /* cancelled/failed — PIN pad stays visible as fallback */ });
+  }
+  document.getElementById('btnLockBiometric').addEventListener('click', tryBiometricUnlock);
+
+  document.getElementById('toggleAppLock').addEventListener('change', function(){
+    if(this.checked){ this.checked = false; startLockFlow('setup-new'); }
+    else { this.checked = true; startLockFlow('disable-confirm'); }
+  });
+  document.getElementById('toggleBiometric').addEventListener('change', function(){
+    var box = this;
+    if(this.checked){
+      checkBiometricAvailable().then(function(avail){
+        if(!avail){ box.checked = false; toast('Face ID / Touch ID no disponible en este dispositivo'); return; }
+        registerBiometric().then(function(){ toast('Face ID / Touch ID activado'); })
+          .catch(function(){ box.checked = false; toast('No se pudo activar'); });
+      });
+    } else {
+      var c = getLockConfig();
+      c.useBiometric = false; c.credentialId = null;
+      saveLockConfig(c);
+    }
+  });
+  function reflectLockUI(){
+    var cfg = getLockConfig();
+    document.getElementById('toggleAppLock').checked = !!cfg.enabled;
+    document.getElementById('rowBiometric').style.display = cfg.enabled ? 'flex' : 'none';
+    document.getElementById('toggleBiometric').checked = !!cfg.useBiometric;
+    checkBiometricAvailable().then(function(avail){ biometricAvailable = avail; });
+  }
+
   function cloudSignUp(emailElId, passElId, msgElId){
     var c = getCloudClient(); if(!c){ cloudAuthMsg(msgElId, 'Sin conexión', true); return; }
     var email = document.getElementById(emailElId).value.trim();
@@ -3312,6 +3666,7 @@
 
   processRecurring();
   reflectSettingsUI();
+  reflectLockUI();
   renderAll();
   setView('activity');
   if(document.readyState === 'loading'){
