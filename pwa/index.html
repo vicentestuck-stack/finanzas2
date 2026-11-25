@@ -648,8 +648,8 @@
         <button class="btn btn-ghost" id="btnExport" type="button">Exportar respaldo (.json)</button>
         <label class="btn btn-ghost" style="display:flex" for="importFile">Importar respaldo</label>
         <input type="file" id="importFile" accept="application/json" class="vis-hidden">
-        <label class="btn btn-ghost" style="display:flex" for="importBankFile">Importar Excel del banco</label>
-        <input type="file" id="importBankFile" accept=".xls,.xlsx" class="vis-hidden">
+        <label class="btn btn-ghost" style="display:flex" for="importBankFile">Importar Excel/CSV del banco o de Finsy</label>
+        <input type="file" id="importBankFile" accept=".xls,.xlsx,.csv" class="vis-hidden">
         <button class="btn btn-danger" id="btnReset" type="button">Borrar todos los datos</button>
       </div>
 
@@ -3023,21 +3023,74 @@
     for(var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) | 0; }
     return (h>>>0).toString(36);
   }
-  function importBankExcel(file){
-    if(typeof XLSX === 'undefined'){ toast('No se pudo cargar el lector de Excel (¿sin internet?)'); return; }
+  // A quoted-CSV line parser (handles commas inside "quoted fields" and "" escapes),
+  // used for both a bank's own CSV export and Finsy's own "Exportar movimientos (.csv)".
+  function parseCsvLine(line){
+    var out = [], cur = '', inQuotes = false;
+    for(var i=0;i<line.length;i++){
+      var ch = line[i];
+      if(inQuotes){
+        if(ch === '"'){ if(line[i+1] === '"'){ cur += '"'; i++; } else inQuotes = false; }
+        else cur += ch;
+      } else {
+        if(ch === '"') inQuotes = true;
+        else if(ch === ',') { out.push(cur); cur = ''; }
+        else cur += ch;
+      }
+    }
+    out.push(cur);
+    return out;
+  }
+  function parseCsvText(text){
+    text = String(text||'').replace(/^﻿/, '');
+    var lines = text.split(/\r\n|\n|\r/).filter(function(l){ return l.length>0; });
+    return lines.map(parseCsvLine);
+  }
+  function categoryIdByName(name){
+    var n = String(name||'').trim().toLowerCase();
+    if(!n) return null;
+    var found = state.categories.find(function(c){ return c.name.toLowerCase()===n; });
+    return found ? found.id : null;
+  }
+  // Finsy's own CSV export names the account by its current label, not its id (ids
+  // aren't stable/meaningful across a round trip) — reuse a matching account if one
+  // exists, or create it, rather than silently dumping everything into the first account.
+  function ensureAccountByName(name){
+    var n = String(name||'').trim();
+    if(!n) return state.accounts[0].id;
+    var found = state.accounts.find(function(a){ return a.name.toLowerCase()===n.toLowerCase(); });
+    if(found) return found.id;
+    var acc = { id: uid(), name: n, color: PALETTE[state.accounts.length % PALETTE.length], startBalance: 0 };
+    state.accounts.push(acc);
+    return acc.id;
+  }
+  function importTransactionsFile(file){
+    if(guardReadOnly()) return;
+    var isCsv = /\.csv$/i.test(file.name) || file.type==='text/csv';
+    if(!isCsv && typeof XLSX === 'undefined'){ toast('No se pudo cargar el lector de Excel (¿sin internet?)'); return; }
     var reader = new FileReader();
     reader.onload = function(){
       try{
-        var data = new Uint8Array(reader.result);
-        var wb = XLSX.read(data, { type:'array', cellDates:true });
-        var sheet = wb.Sheets[wb.SheetNames[0]];
-        var rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:null });
+        var rows;
+        if(isCsv){
+          rows = parseCsvText(reader.result);
+        } else {
+          var data = new Uint8Array(reader.result);
+          var wb = XLSX.read(data, { type:'array', cellDates:true });
+          var sheet = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:null });
+        }
         var headerIdx = -1;
         for(var i=0;i<rows.length;i++){
           var cell0 = rows[i] && rows[i][0];
           if(typeof cell0 === 'string' && cell0.trim().toLowerCase() === 'fecha'){ headerIdx = i; break; }
         }
         if(headerIdx === -1) throw new Error('no header row found');
+        // Two layouts share the "Fecha" header: a bank statement (Fecha, Descripción,
+        // Cargo, Abono, Saldo) and Finsy's own CSV export (Fecha, Descripcion,
+        // Categoria, Cuenta, Monto) — tell them apart by whether "Monto" is a column.
+        var header = rows[headerIdx].map(function(c){ return String(c==null?'':c).trim().toLowerCase(); });
+        var isFinsyFormat = header.indexOf('monto') > -1;
         var existingIds = {};
         state.transactions.forEach(function(t){ existingIds[t.id] = true; });
         var defaultAccountId = state.accounts[0].id;
@@ -3048,24 +3101,37 @@
           if(!row || !row.length) continue;
           var date = parseBankDate(row[0]);
           var desc = row[1] != null ? String(row[1]).trim() : '';
-          var cargo = parseCLPAmount(row[2]);
-          var abono = parseCLPAmount(row[3]);
-          if(!date || !desc || (cargo == null && abono == null)){ skipped++; continue; }
-          var amount = cargo != null ? -Math.abs(cargo) : Math.abs(abono);
+          var amount, categoryId, accountId, sigPart;
+          if(isFinsyFormat){
+            amount = parseCLPAmount(row[4]);
+            if(!date || !desc || amount == null){ skipped++; continue; }
+            categoryId = categoryIdByName(row[2]) || guessCategory(desc) || 'otros';
+            accountId = ensureAccountByName(row[3]);
+            sigPart = String(amount);
+          } else {
+            var cargo = parseCLPAmount(row[2]);
+            var abono = parseCLPAmount(row[3]);
+            if(!date || !desc || (cargo == null && abono == null)){ skipped++; continue; }
+            amount = cargo != null ? -Math.abs(cargo) : Math.abs(abono);
+            categoryId = guessCategory(desc) || 'otros';
+            accountId = defaultAccountId;
+            sigPart = cargo + '|' + abono;
+          }
           // Content-based id (date+desc+amount), not the spreadsheet row number: a row's
           // position shifts between exports that cover overlapping date ranges, but its
           // content doesn't, so this is what lets a re-import recognize the same movement
           // instead of adding it twice. The occurrence count only disambiguates genuine
           // same-day same-amount repeats from each other, in file order.
-          var signature = 'xls:' + date + ':' + simpleHash(desc + '|' + cargo + '|' + abono);
+          var signature = (isFinsyFormat?'csv:':'xls:') + date + ':' + simpleHash(desc + '|' + sigPart);
           var n = occurrenceInBatch[signature] || 0;
           occurrenceInBatch[signature] = n + 1;
           var id = signature + ':' + n;
           if(existingIds[id]){ duplicates++; continue; }
           existingIds[id] = true;
           state.transactions.push({
-            id: id, amount: amount, categoryId: guessCategory(desc) || 'otros', accountId: defaultAccountId,
-            description: desc, date: date, createdAt: Date.now().toString(36) + r.toString(36), source: 'bank_import'
+            id: id, amount: amount, categoryId: categoryId, accountId: accountId,
+            description: desc, date: date, createdAt: Date.now().toString(36) + r.toString(36),
+            source: isFinsyFormat ? 'csv_import' : 'bank_import'
           });
           added++;
         }
@@ -3081,10 +3147,10 @@
           toast('No había movimientos nuevos para importar');
         }
       }catch(e){
-        toast('No se pudo leer ese archivo. Revisa que tenga las columnas Fecha, Descripción, Cargo, Abono, Saldo.');
+        toast('No se pudo leer ese archivo. Revisa que tenga las columnas Fecha, Descripción, Cargo, Abono, Saldo (o un CSV exportado desde Finsy).');
       }
     };
-    reader.readAsArrayBuffer(file);
+    if(isCsv) reader.readAsText(file); else reader.readAsArrayBuffer(file);
   }
 
   // ---------- settings UI ----------
@@ -3229,7 +3295,7 @@
     e.target.value = '';
   });
   document.getElementById('importBankFile').addEventListener('change', function(e){
-    if(e.target.files && e.target.files[0]) importBankExcel(e.target.files[0]);
+    if(e.target.files && e.target.files[0]) importTransactionsFile(e.target.files[0]);
     e.target.value = '';
   });
   document.getElementById('btnReset').addEventListener('click', function(){
