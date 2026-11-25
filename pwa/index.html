@@ -38,7 +38,7 @@
   .topbar-actions{display:flex;align-items:center;gap:8px}
   .icon-btn{width:38px;height:38px;border-radius:11px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0}
   .icon-btn:active{transform:scale(.95)}
-  main{flex:1;overflow-y:auto;padding:4px 20px 110px 20px;display:flex;flex-direction:column;gap:18px}
+  main{flex:1;overflow-y:auto;padding:4px 20px calc(160px + env(safe-area-inset-bottom)) 20px;display:flex;flex-direction:column;gap:18px}
   .view{display:none;flex-direction:column;gap:18px}
   .view.active{display:flex}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:16px}
