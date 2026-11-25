@@ -1040,7 +1040,11 @@
   var investPickedColor = PALETTE[0];
   var sharedActivePersonId = null;
 
-  function catById(id){ return state.categories.find(function(c){return c.id===id;}) || state.categories[state.categories.length-1]; }
+  function catById(id){
+    return state.categories.find(function(c){return c.id===id;})
+      || state.categories.find(function(c){return c.id==='otros';})
+      || state.categories[state.categories.length-1];
+  }
   function acctById(id){ return state.accounts.find(function(a){return a.id===id;}) || state.accounts[0]; }
 
   function monthTotals(mk, accountId){
@@ -1778,7 +1782,13 @@
     document.querySelectorAll('#keypadScreen [data-type]').forEach(function(b){ b.classList.toggle('sel', b.dataset.type===addType); });
     kpCategoryManual = false; // retyping the description re-guesses the category (new or existing), until you pick one by hand
     kpFillCategories();
-    if(existing){ kpSetActiveCategory(existing.categoryId); }
+    if(existing){
+      // A category can be stale (deleted/recreated with a new id) if saved
+      // long ago; show "Otros" rather than silently defaulting to whichever
+      // chip happens to render first.
+      var catStillExists = state.categories.some(function(c){ return c.id===existing.categoryId; });
+      kpSetActiveCategory(catStillExists ? existing.categoryId : 'otros');
+    }
     kpFillAccounts();
     document.getElementById('kpDesc').value = existing ? (existing.description||'') : '';
     document.getElementById('kpDate').value = existing ? existing.date : todayISO();
@@ -2482,8 +2492,13 @@
     salud:['farmacia','doctor','salud','clinica','clínica'],
     cafe:['café','cafe','starbucks','coffee'],
     entretenimiento:['cine','juego','entretenimiento'],
-    ingresos:['sueldo','ingreso','depósito','deposito'],
-    mwurcje846s7jz:['anto','yur','amor','yurley']
+    ingresos:['sueldo','ingreso','depósito','deposito']
+  };
+  // Extra keywords for custom categories the user created (looked up by name,
+  // not id — a custom category's id is random and changes if it's ever
+  // deleted and recreated, so a hardcoded id here would silently go stale).
+  var CATEGORY_SYNONYMS_BY_NAME = {
+    'anto y yur':['anto','yur','amor','yurley']
   };
   var CATEGORY_NAME_STOPWORDS = {y:1, de:1, la:1, el:1, los:1, las:1, del:1, en:1};
   // Returns a matching category id, or null when nothing in the text matches.
@@ -2491,7 +2506,12 @@
     var lower = text.toLowerCase();
     var remembered = state.merchantMemory[normalizeDesc(text)];
     if(remembered && state.categories.some(function(c){return c.id===remembered;})) return remembered;
+    for(var i=0;i<state.categories.length;i++){
+      var byNameWords = CATEGORY_SYNONYMS_BY_NAME[state.categories[i].name.toLowerCase()];
+      if(byNameWords && byNameWords.some(function(w){ return hasWord(lower, w); })) return state.categories[i].id;
+    }
     for(var id in CATEGORY_SYNONYMS){
+      if(!state.categories.some(function(c){return c.id===id;})) continue; // stale/deleted category id — skip, don't mis-route
       if(CATEGORY_SYNONYMS[id].some(function(w){ return hasWord(lower, w); })) return id;
     }
     for(var i=0;i<state.categories.length;i++){
