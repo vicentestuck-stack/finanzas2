@@ -3381,7 +3381,13 @@
   }
   function cloudSignOut(){
     var c = getCloudClient();
-    (c ? c.auth.signOut() : Promise.resolve()).finally(function(){ toast('Sesión cerrada'); });
+    (c ? c.auth.signOut() : Promise.resolve()).finally(function(){
+      // Explicit sign-out only (never on ordinary local-only use, where
+      // there's simply no session yet) — otherwise this would erase a
+      // local-only user's data on every page load.
+      resetLocalStateForNewAccount();
+      toast('Sesión cerrada');
+    });
   }
 
   // ---------- push notifications (budget alerts, due dates) ----------
@@ -3604,9 +3610,25 @@
     }).catch(function(){});
   }
 
+  // Wipes this device's local cache back to a blank slate. Used whenever an
+  // account's session ends here (or a DIFFERENT account signs in on a
+  // shared device), so one person's financial data never lingers in
+  // localStorage for the next person who opens Finsy on the same device.
+  function resetLocalStateForNewAccount(){
+    applyingRemoteState = true;
+    state = seedState();
+    localStorage.removeItem('finsy:localUpdatedAt');
+    saveState();
+    applyingRemoteState = false;
+    renderAll();
+    reflectSettingsUI();
+  }
   function onCloudSessionChange(session){
     cloudSession = session;
     if(session){
+      var lastUserId = localStorage.getItem('finsy:lastUserId');
+      if(lastUserId && lastUserId !== session.user.id) resetLocalStateForNewAccount();
+      localStorage.setItem('finsy:lastUserId', session.user.id);
       hideGate();
       cloudRefreshBankStatus().then(function(){ renderCloudSettings(); if(navigator.onLine) cloudSync(); });
       initialCloudStateSync();
