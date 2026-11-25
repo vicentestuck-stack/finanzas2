@@ -1580,13 +1580,14 @@
     return out;
   }
   var ANT_SPENDING_THRESHOLD = 8000; // CLP; small, easy-to-ignore purchases below this count as "gasto hormiga"
+  var antSpendingExpanded = false;
   function antSpendingSummary(mk){
     mk = mk || monthKey();
     var matches = state.transactions.filter(function(t){
       return !t.isTransfer && t.amount<0 && Math.abs(t.amount)<=ANT_SPENDING_THRESHOLD && monthKey(t.date)===mk;
-    });
+    }).sort(function(a,b){ return b.date.localeCompare(a.date); });
     var total = matches.reduce(function(a,t){return a+Math.abs(t.amount);},0);
-    return { count: matches.length, total: total };
+    return { count: matches.length, total: total, items: matches };
   }
   function renderAnalysis(){
     var forecastEl = document.getElementById('forecastCard');
@@ -1607,10 +1608,22 @@
     if(antEl){
       var ant = antSpendingSummary();
       if(ant.count>0){
-        antEl.innerHTML = '<span class="small muted">Gasto hormiga este mes</span>'
+        antEl.innerHTML = '<button type="button" id="antSpendingToggle" class="tx-row" style="flex-direction:column;align-items:stretch;gap:2px;padding:0;background:none;border:none">'
+          +'<div class="row" style="width:100%">'
+          +'<span class="tx-meta"><span class="small muted">Gasto hormiga este mes</span></span>'
+          +'<span class="xsmall faint" style="margin-right:4px">'+(antSpendingExpanded?'▾':'▸')+'</span>'
+          +'</div>'
           +'<span class="amount" style="font-family:\'Space Grotesk\',sans-serif;font-weight:700;font-size:22px">'+fmtMaybeHidden(ant.total)+'</span>'
-          +'<span class="xsmall faint">'+ant.count+' compra'+(ant.count===1?'':'s')+' chica'+(ant.count===1?'':'s')+' (≤'+fmt(ANT_SPENDING_THRESHOLD)+' cada una) que suman esto — fácil de no notar, pero se acumula</span>';
+          +'<span class="xsmall faint">'+ant.count+' compra'+(ant.count===1?'':'s')+' chica'+(ant.count===1?'':'s')+' (≤'+fmt(ANT_SPENDING_THRESHOLD)+' cada una) que suman esto — toca para ver cuáles son</span>'
+          +'</button>'
+          +(antSpendingExpanded ? '<div class="list" style="margin-top:10px">'+ant.items.map(txRowHtml).join('')+'</div>' : '');
+        document.getElementById('antSpendingToggle').addEventListener('click', function(){
+          antSpendingExpanded = !antSpendingExpanded;
+          renderAnalysis();
+        });
+        if(antSpendingExpanded) bindTxRowClicks(antEl);
       } else {
+        antSpendingExpanded = false;
         antEl.innerHTML = '<span class="small muted">Gasto hormiga este mes</span>'
           +'<span class="xsmall faint" style="margin-top:4px">Sin compras chicas (≤'+fmt(ANT_SPENDING_THRESHOLD)+') registradas todavía este mes.</span>';
       }
